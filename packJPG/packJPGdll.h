@@ -5,11 +5,13 @@
 	function declarations: library only functions
 	----------------------------------------------- */
 	
-IMPORT bool pjglib_convert_stream2stream( char* msg );
-IMPORT bool pjglib_convert_file2file( char* in, char* out, char* msg );
-IMPORT bool pjglib_convert_stream2mem( unsigned char** out_file, unsigned int* out_size, char* msg );
-IMPORT void pjglib_init_streams( void* in_src, int in_type, int in_size, void* out_dest, int out_type );
-IMPORT void pjglib_version_info( char* msg );
+IMPORT void* pjglib_get_instance( void );
+IMPORT void pjglib_del_instance( void* p );
+IMPORT bool pjglib_convert_stream2stream( void* p, char* msg );
+IMPORT bool pjglib_convert_file2file( void* p, char* in, char* out, char* msg );
+IMPORT bool pjglib_convert_stream2mem( void* p, unsigned char** out_file, unsigned int* out_size, char* msg );
+IMPORT void pjglib_init_streams( void* p, void* in_src, int in_type, int in_size, void* out_dest, int out_type );
+IMPORT void pjglib_version_info( void* p, char* msg );
 
 /* a short reminder about input/output stream types
    for the pjglib_init_streams() function

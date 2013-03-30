@@ -206,12 +206,9 @@ static inline void shift_model( model_b* model, int ctx1, int ctx2, int ctx3 )
 /* -----------------------------------------------
 	generic model_s encoder function
 	----------------------------------------------- */
-static inline void encode_ari( aricoder* encoder, model_s* model, int c )
+static inline void encode_ari( symbol& s, int& esc, aricoder* encoder, model_s* model, int c )
 {
-	static symbol s;
-	static int esc;
-	
-	do {		
+	do {
 		esc = model->convert_int_to_symbol( c, &s );
 		encoder->encode( &s );
 	} while ( esc );
@@ -221,12 +218,8 @@ static inline void encode_ari( aricoder* encoder, model_s* model, int c )
 /* -----------------------------------------------
 	generic model_s decoder function
 	----------------------------------------------- */	
-static inline int decode_ari( aricoder* decoder, model_s* model )
+static inline int decode_ari( symbol& s, unsigned int& count, int& c, aricoder* decoder, model_s* model )
 {
-	static symbol s;
-	static unsigned int count;
-	static int c;
-	
 	do{
 		model->get_symbol_scale( &s );
 		count = decoder->decode_count( &s );
@@ -241,10 +234,8 @@ static inline int decode_ari( aricoder* decoder, model_s* model )
 /* -----------------------------------------------
 	generic model_b encoder function
 	----------------------------------------------- */	
-static inline void encode_ari( aricoder* encoder, model_b* model, int c )
+static inline void encode_ari( symbol& s, aricoder* encoder, model_b* model, int c )
 {
-	static symbol s;
-	
 	model->convert_int_to_symbol( c, &s );
 	encoder->encode( &s );
 	model->update_model( c );
@@ -253,12 +244,8 @@ static inline void encode_ari( aricoder* encoder, model_b* model, int c )
 /* -----------------------------------------------
 	generic model_b decoder function
 	----------------------------------------------- */	
-static inline int decode_ari( aricoder* decoder, model_b* model )
+static inline int decode_ari( symbol& s, unsigned int& count, int& c, aricoder* decoder, model_b* model )
 {
-	static symbol s;
-	static unsigned int count;
-	static int c;
-	
 	model->get_symbol_scale( &s );
 	count = decoder->decode_count( &s );
 	c = model->convert_symbol_to_int( count, &s );

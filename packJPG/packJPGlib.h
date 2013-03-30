@@ -1,18 +1,25 @@
 // packJPGlib.h - function declarations for the packJPG library
-#if defined BUILD_DLL
-	#define EXPORT __declspec( dllexport )
+#ifdef __cplusplus
+	#define EXTERNC extern "C"
 #else
-	#define EXPORT
+	#define EXTERNC
+#endif
+#if defined BUILD_DLL
+	#define EXPORT EXTERNC __declspec( dllexport )
+#else
+	#define EXPORT EXTERNC
 #endif
 
 /* -----------------------------------------------
 	function declarations: library only functions
 	----------------------------------------------- */
 
-EXPORT bool pjglib_convert_stream2stream( char* msg );
-EXPORT bool pjglib_convert_file2file( char* in, char* out, char* msg );
-EXPORT bool pjglib_convert_stream2mem( unsigned char** out_file, unsigned int* out_size, char* msg );
-EXPORT void pjglib_init_streams( void* in_src, int in_type, int in_size, void* out_dest, int out_type );
+EXPORT void* pjglib_get_instance( void );
+EXPORT void pjglib_del_instance( void* p );
+EXPORT bool pjglib_convert_stream2stream( void* p, char* msg );
+EXPORT bool pjglib_convert_file2file( void* p, char* in, char* out, char* msg );
+EXPORT bool pjglib_convert_stream2mem( void* p, unsigned char** out_file, unsigned int* out_size, char* msg );
+EXPORT void pjglib_init_streams( void* p, void* in_src, int in_type, int in_size, void* out_dest, int out_type );
 EXPORT void pjglib_version_info( char* msg );
 
 /* a short reminder about input/output stream types
