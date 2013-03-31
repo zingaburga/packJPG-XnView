@@ -1,5 +1,6 @@
 #define DCT_RSC_FACTOR		8192
-#define DCT_RESCALE( v )	( ( ( v > 0 ) ? ( v + (DCT_RSC_FACTOR/2) ) : ( v - (DCT_RSC_FACTOR/2) ) ) / DCT_RSC_FACTOR )
+#define DCT_RSC_FACTOR_LOG2 13
+#define DCT_RESCALE( v )	( ( v > 0 ) ? ( ( v + (DCT_RSC_FACTOR/2) ) / DCT_RSC_FACTOR ) : ( ( v - (DCT_RSC_FACTOR/2) + (DCT_RSC_FACTOR-1) ) >> DCT_RSC_FACTOR_LOG2 ) )
 
 
 // precalculated int values for 8x8 IDCT, multplied by 8192
