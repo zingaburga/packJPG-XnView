@@ -1,12 +1,15 @@
 
 XNVIEW_PLUGIN = xnview/Xpjg.usr
 PACKJPG_LIB = packJPG/bitops.o packJPG/aricoder.o packJPG/packjpg.o
-#PACKJPG_LIB = packJPG/packJPGlib.a
+#PACKJPG_LIB = packJPG/packJPGlib.a #dunno why it doesn't work
 LIBJPEG_LIB = libjpeg-turbo/.libs/libjpeg.a
-CPPFLAGS = -Wall -Wl,--kill-at -s -O2 -shared -o $(XNVIEW_PLUGIN) $(PACKJPG_LIB) xnview/xpjg.o $(LIBJPEG_LIB) -static-libgcc
 
-$(XNVIEW_PLUGIN): $(PACKJPG_LIB) xnview/xpjg.o $(LIBJPEG_LIB)
-	g++ $(CPPFLAGS)
+DEPS = $(PACKJPG_LIB) xnview/xpjg.o $(LIBJPEG_LIB)
+CFLAGS = -Wall -Wl,--kill-at -s -O2 -shared -static-libgcc -static-libstdc++
+CPPFLAGS = $(CFLAGS) -o $(XNVIEW_PLUGIN) $(DEPS)
+
+$(XNVIEW_PLUGIN): $(DEPS)
+	g++ $(CFLAGS) -o $@ $^
 
 xnview/xpjg.o: xnview/xpjg.c
 	cd xnview
