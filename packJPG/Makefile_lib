@@ -6,7 +6,7 @@ CC      = gcc
 CPP     = g++
 AR      = ar
 RM      = del
-CFLAGS  = -I. -DBUILD_LIB -O3 -Wall -pedantic -fsched-spec-load -fomit-frame-pointer
+CFLAGS  = -I. -DBUILD_LIB -O3 -Wall -pedantic -funroll-loops -ffast-math -fsched-spec-load -fomit-frame-pointer
 LDFLAGS = -fvisibility=hidden -static-libgcc -static-libstdc++
 DEPS    = bitops.h aricoder.h pjpgtbl.h dct8x8.h Makefile
 OBJ     = bitops.o aricoder.o packjpg.o

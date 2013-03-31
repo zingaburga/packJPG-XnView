@@ -6,7 +6,7 @@ CC      = gcc
 CPP     = g++
 RC      = windres -O coff
 RM      = del
-CFLAGS  = -I. -DBUILD_DLL -O3 -Wall -pedantic -fsched-spec-load -fomit-frame-pointer
+CFLAGS  = -I. -DBUILD_DLL -O3 -Wall -pedantic -funroll-loops -ffast-math -fsched-spec-load -fomit-frame-pointer
 LDFLAGS = -Wl,--out-implib,libpackJPG.a -fvisibility=hidden -static-libgcc -static-libstdc++
 DEPS    = bitops.h aricoder.h pjpgtbl.h dct8x8.h Makefile
 OBJ     = bitops.o aricoder.o packjpg.o
