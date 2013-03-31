@@ -1,30 +1,35 @@
 /*
-packJPG v2.5 (11/11/2011)
-~~~~~~~~~~~~~~~~~~~~~~~~~
+packJPG v2.5f (02/24/2013)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 packJPG is a compression program specially designed for further
 compression of JPEG images without causing any further loss. Typically
 it reduces the file size of a JPEG file by 20%.
 
 
-GPL v3 license and special permissions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+LGPL v3 license and special permissions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 All programs in this package are free software; you can redistribute 
-them and/or modify them under the terms of the GNU General Public 
+them and/or modify them under the terms of the GNU Lesser General Public 
 License as published by the Free Software Foundation; either version 3 
 of the License, or (at your option) any later version. 
 
 The package is distributed in the hope that it will be useful, but 
 WITHOUT ANY WARRANTY; without even the implied warranty of 
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General 
-Public License for more details at http://www.gnu.org/copyleft/gpl.html.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser 
+General Public License for more details at 
+http://www.gnu.org/copyleft/lgpl.html. 
 
-I also offer special permissions to use the packJPG library to freeware 
-closed source developers ON REQUEST. If you need such special 
-permission please contact me at packjpg (at) htw-aalen.de.
+If the LGPL v3 license is not compatible with your software project you 
+might contact us and ask for a special permission to use the packJPG 
+library under different conditions. In any case, usage of the packJPG 
+algorithm under the LGPL v3 or above is highly advised and special 
+permissions will only be given where necessary on a case by case basis. 
+This offer is aimed mainly at closed source freeware developers seeking 
+to add PJG support to their software projects. 
 
-Copyright 2006...2011 by HTW Aalen University and Matthias Stirner.
+Copyright 2006...2013 by HTW Aalen University and Matthias Stirner.
 
 
 Usage of packJPG
@@ -126,41 +131,13 @@ may download older versions of packJPG from:
 http://www.elektronik.htw-aalen.de/packJPG/binaries/old/
 
 
-Self extracting archives 
-~~~~~~~~~~~~~~~~~~~~~~~~
+Open source release / developer info
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-packJPX from the packJPG v2.4 package is now replaced by packARC. While 
-packJPX was capable of creating self extracting (SFX) archives, packARC 
-is a full blown command line archiver using the packJPG compression 
-algorithm. It includes all the important functionality such as 
-add/remove/extract/list/verify files to/from archive plus, of course, 
-creating SFX files. Using packARC, it's possible to share a collection 
-of packJPG compressed JPEG images in one single file while not requiring 
-the receiver to download the packJPG application. 
-
-packARC comes with no additional documentation. A short list of commands 
-and switches is included in the program and can be viewed by simply 
-typing 'packARC' with no additional parameters. Self extracting archives 
-are created using this syntax: 
-
-"packARC a -sfx [name of SFX archive] [file(s) to add]" 
-
-Self extracting archives created by packARC are self contained and will 
-extract their contents to the path of the archive upon execution. If not 
-specified otherwise switch "-r" or "-o", existing files with the same 
-filenames will be skipped in this process. 
-
-Other than packJPG, packARC will process and add any type of file to the 
-archive. However, only JPEG image files are actually compressed by 
-packARC, all other file types will be stored, not compressed, inside the 
-archive. As there won't be any reduction in size for these, it is not 
-advised to add large quantities of non-JPEG files to a packARC created 
-archive.  
-
-Please note that, although being well-tested without any problems having 
-been found so far, packARC is still in beta stage and shouldn't be used 
-for backup of important data. The packARC source code is included in the 
-source subdirectory. 
+The packJPG source codes is found inside the "source" subdirectory. 
+Additional documents aimed to developers, containing detailed 
+instructions on compiling the source code and using special 
+functionality, are included in the "packJPG" subdirectory. 
  
 
 History
@@ -219,9 +196,32 @@ v2.5 (11/11/2011) (public)
  - removed packJPX from the package
  - added packARC to the package
  - packJPG is now open source!
-
-v2.5a (17/16/2011) (public)
- - compatibility improvements, avoid some warnings
+ 
+v2.5a (11/21/11) (public)
+ - source code compatibility improvements (Gerhard Seelmann)
+ - avoid some compiler warnings (Gerhard Seelmann)
+ - source code clean up (Gerhard Seelmann)
+ 
+v2.5b (01/27/12) (public)
+ - further removal of redundant code
+ - some fixes for the packJPG static library
+ - compiler fix for Mac OS (thanks to Sergio Lopez)
+ - improved compression ratio calculation
+ - eliminated the need for temp files
+ 
+v2.5c (04/13/12) (public)
+ - various source code optimizations
+ 
+v2.5d (07/03/12) (public)
+ - fixed a rare bug with progressive JPEG
+ 
+v2.5e (07/03/12) (public)
+ - some minor source code optimizations
+ - changed packJPG licensing to LGPL
+ - moved packARC to a separate package
+ 
+v2.5f (02/24/13) (public)
+ - fixed a minor bug in the JPG parser (thanks to Stephan Busch)
 
 
 Acknowledgements
@@ -251,7 +251,7 @@ For questions and bug reports:
 
 
 ____________________________________
-packJPG by Matthias Stirner, 11/2011
+packJPG by Matthias Stirner, 02/2013
 */
 
 #include <stdio.h>
@@ -262,16 +262,21 @@ packJPG by Matthias Stirner, 11/2011
 
 #include "bitops.h"
 #include "aricoder.h"
+#include "pjpgtbl.h"
 #include "dct8x8.h"
-#include "htables.h"
 
-#if defined SFX_STUB // define SFX_STUB as compiler option if you want to create the SFX_Stub!
-#define BUILD_LIB
+#if defined BUILD_DLL // define BUILD_LIB from the compiler options if you want to compile a DLL!
+	#define BUILD_LIB
 #endif
 
 #if defined BUILD_LIB // define BUILD_LIB as compiler option if you want to compile a library!
-#include "packJPGlib.h"
+	#include "packjpglib.h"
 #endif
+
+#define INTERN
+
+#define INIT_MODEL_S(a,b,c) new model_s( a, b, c, 255 )
+#define INIT_MODEL_B(a,b)   new model_b( a, b, 255 )
 
 // #define USE_PLOCOI // uncomment to use loco-i predictor instead of 1DDCT predictor
 // #define DEV_BUILD // uncomment to include developer functions
@@ -305,14 +310,8 @@ packJPG by Matthias Stirner, 11/2011
 
 
 /* -----------------------------------------------
-	struct & enum declarations
+	struct declarations
 	----------------------------------------------- */
-
-enum ACTION { 	comp  =  1, split =  2, coll  =  3,
-				fcoll =  4, zdst  =  5, info  =  6,
-				dist  =  7,	pgm   =  8	};
-				
-enum F_TYPE {   JPEG = 0, PJG = 1, UNK = 2		};
 
 struct componentInfo {
 	unsigned short* qtable; // quantization table
@@ -343,7 +342,7 @@ struct huffTree {
 };
 
 class packJPG {
-
+private:
 
 /* -----------------------------------------------
 	static variables previously from aricoder.h
@@ -363,141 +362,143 @@ int ari_db_c;
 	function declarations: main interface
 	----------------------------------------------- */
 
-void initialize_options( int argc, char** argv );
-void process_ui( void );
-void process_file( void );
-void execute( bool (packJPG::*function)() );
-void get_status( bool (packJPG::*function)() );
-void show_help( void );
+#if !defined( BUILD_LIB )
+INTERN void initialize_options( int argc, char** argv );
+INTERN void process_ui( void );
+INTERN inline const char* get_status( bool (packJPG::*function)() );
+INTERN void show_help( void );
+#endif
+INTERN void process_file( void );
+INTERN void execute( bool (packJPG::*function)() );
 
 
 /* -----------------------------------------------
 	function declarations: main functions
 	----------------------------------------------- */
-	
-bool check_file( void );
-bool read_jpeg( void );
-bool merge_jpeg( void );
-bool decode_jpeg( void );
-bool recode_jpeg( void );
-bool adapt_icos( void );
-bool predict_dc( void );
-bool unpredict_dc( void );
-bool check_value_range( void );
-bool calc_zdst_lists( void );
-bool pack_pjg( void );
-bool unpack_pjg( void );
-bool swap_streams( void );
-bool compare_output( void );
-bool reset_buffers( void );
+#if !defined( BUILD_LIB )
+INTERN bool check_file( void );
+INTERN bool swap_streams( void );
+INTERN bool compare_output( void );
+#endif
+INTERN bool reset_buffers( void );
+INTERN bool read_jpeg( void );
+INTERN bool merge_jpeg( void );
+INTERN bool decode_jpeg( void );
+INTERN bool recode_jpeg( void );
+INTERN bool adapt_icos( void );
+INTERN bool predict_dc( void );
+INTERN bool unpredict_dc( void );
+INTERN bool check_value_range( void );
+INTERN bool calc_zdst_lists( void );
+INTERN bool pack_pjg( void );
+INTERN bool unpack_pjg( void );
 
 
 /* -----------------------------------------------
 	function declarations: jpeg-specific
 	----------------------------------------------- */
 
-bool jpg_setup_imginfo( void );
-bool jpg_parse_jfif( unsigned char type, unsigned int len, unsigned char* segment );
-bool jpg_rebuild_header( void );
+INTERN bool jpg_setup_imginfo( void );
+INTERN bool jpg_parse_jfif( unsigned char type, unsigned int len, unsigned char* segment );
+INTERN bool jpg_rebuild_header( void );
 
-int jpg_decode_block_seq( abitreader* huffr, huffTree* dctree, huffTree* actree, short* block );
-int jpg_encode_block_seq( abitwriter* huffw, huffCodes* dctbl, huffCodes* actbl, short* block );
+INTERN int jpg_decode_block_seq( abitreader* huffr, huffTree* dctree, huffTree* actree, short* block );
+INTERN int jpg_encode_block_seq( abitwriter* huffw, huffCodes* dctbl, huffCodes* actbl, short* block );
 
-int jpg_decode_dc_prg_fs( abitreader* huffr, huffTree* dctree, short* block );
-int jpg_encode_dc_prg_fs( abitwriter* huffw, huffCodes* dctbl, short* block );
-int jpg_decode_ac_prg_fs( abitreader* huffr, huffTree* actree, short* block,
+INTERN int jpg_decode_dc_prg_fs( abitreader* huffr, huffTree* dctree, short* block );
+INTERN int jpg_encode_dc_prg_fs( abitwriter* huffw, huffCodes* dctbl, short* block );
+INTERN int jpg_decode_ac_prg_fs( abitreader* huffr, huffTree* actree, short* block,
 						int* eobrun, int from, int to );
-int jpg_encode_ac_prg_fs( abitwriter* huffw, huffCodes* actbl, short* block,
+INTERN int jpg_encode_ac_prg_fs( abitwriter* huffw, huffCodes* actbl, short* block,
 						int* eobrun, int from, int to );
 
-int jpg_decode_dc_prg_sa( abitreader* huffr, short* block );
-int jpg_encode_dc_prg_sa( abitwriter* huffw, short* block );
-int jpg_decode_ac_prg_sa( abitreader* huffr, huffTree* actree, short* block,
+INTERN int jpg_decode_dc_prg_sa( abitreader* huffr, short* block );
+INTERN int jpg_encode_dc_prg_sa( abitwriter* huffw, short* block );
+INTERN int jpg_decode_ac_prg_sa( abitreader* huffr, huffTree* actree, short* block,
 						int* eobrun, int from, int to );
-int jpg_encode_ac_prg_sa( abitwriter* huffw, abytewriter* storw, huffCodes* actbl,
+INTERN int jpg_encode_ac_prg_sa( abitwriter* huffw, abytewriter* storw, huffCodes* actbl,
 						short* block, int* eobrun, int from, int to );
 
-int jpg_decode_eobrun_sa( abitreader* huffr, short* block, int* eobrun, int from, int to );
-int jpg_encode_eobrun( abitwriter* huffw, huffCodes* actbl, int* eobrun );
-int jpg_encode_crbits( abitwriter* huffw, abytewriter* storw );
+INTERN int jpg_decode_eobrun_sa( abitreader* huffr, short* block, int* eobrun, int from, int to );
+INTERN int jpg_encode_eobrun( abitwriter* huffw, huffCodes* actbl, int* eobrun );
+INTERN int jpg_encode_crbits( abitwriter* huffw, abytewriter* storw );
 
-int jpg_next_huffcode( abitreader *huffw, huffTree *ctree );
-int jpg_next_mcupos( int* mcu, int* cmp, int* csc, int* sub, int* dpos, int* rstw );
-int jpg_next_mcuposn( int* cmp, int* dpos, int* rstw );
-int jpg_skip_eobrun( int* cmp, int* dpos, int* rstw, int* eobrun );
+INTERN int jpg_next_huffcode( abitreader *huffw, huffTree *ctree );
+INTERN int jpg_next_mcupos( int* mcu, int* cmp, int* csc, int* sub, int* dpos, int* rstw );
+INTERN int jpg_next_mcuposn( int* cmp, int* dpos, int* rstw );
+INTERN int jpg_skip_eobrun( int* cmp, int* dpos, int* rstw, int* eobrun );
 
-void jpg_build_huffcodes( unsigned char *clen, unsigned char *cval,
+INTERN void jpg_build_huffcodes( unsigned char *clen, unsigned char *cval,
 				huffCodes *hc, huffTree *ht );
 
 /* -----------------------------------------------
 	function declarations: pjg-specific
 	----------------------------------------------- */
 	
-bool pjg_encode_zstscan( aricoder* enc, int cmp );
-bool pjg_encode_zdst_high( aricoder* enc, int cmp );
-bool pjg_encode_zdst_low( aricoder* enc, int cmp );
-bool pjg_encode_dc( aricoder* enc, int cmp );
-bool pjg_encode_ac_high( aricoder* enc, int cmp );
-bool pjg_encode_ac_low( aricoder* enc, int cmp );
-bool pjg_encode_generic( aricoder* enc, unsigned char* data, int len );
-bool pjg_encode_bit( aricoder* enc, unsigned char bit );
+INTERN bool pjg_encode_zstscan( aricoder* enc, int cmp );
+INTERN bool pjg_encode_zdst_high( aricoder* enc, int cmp );
+INTERN bool pjg_encode_zdst_low( aricoder* enc, int cmp );
+INTERN bool pjg_encode_dc( aricoder* enc, int cmp );
+INTERN bool pjg_encode_ac_high( aricoder* enc, int cmp );
+INTERN bool pjg_encode_ac_low( aricoder* enc, int cmp );
+INTERN bool pjg_encode_generic( aricoder* enc, unsigned char* data, int len );
+INTERN bool pjg_encode_bit( aricoder* enc, unsigned char bit );
 
-bool pjg_decode_zstscan( aricoder* dec, int cmp );
-bool pjg_decode_zdst_high( aricoder* dec, int cmp );
-bool pjg_decode_zdst_low( aricoder* dec, int cmp );
-bool pjg_decode_dc( aricoder* dec, int cmp );
-bool pjg_decode_ac_high( aricoder* dec, int cmp );
-bool pjg_decode_ac_low( aricoder* dec, int cmp );
-bool pjg_decode_generic( aricoder* dec, unsigned char** data, int* len );
-bool pjg_decode_bit( aricoder* dec, unsigned char* bit );
+INTERN bool pjg_decode_zstscan( aricoder* dec, int cmp );
+INTERN bool pjg_decode_zdst_high( aricoder* dec, int cmp );
+INTERN bool pjg_decode_zdst_low( aricoder* dec, int cmp );
+INTERN bool pjg_decode_dc( aricoder* dec, int cmp );
+INTERN bool pjg_decode_ac_high( aricoder* dec, int cmp );
+INTERN bool pjg_decode_ac_low( aricoder* dec, int cmp );
+INTERN bool pjg_decode_generic( aricoder* dec, unsigned char** data, int* len );
+INTERN bool pjg_decode_bit( aricoder* dec, unsigned char* bit );
 
-void pjg_get_zerosort_scan( unsigned char* sv, int cmp );
-bool pjg_optimize_header( void );
-bool pjg_unoptimize_header( void );
+INTERN void pjg_get_zerosort_scan( unsigned char* sv, int cmp );
+INTERN bool pjg_optimize_header( void );
+INTERN bool pjg_unoptimize_header( void );
 
-void pjg_aavrg_prepare( unsigned short** abs_coeffs, int* weights, unsigned short* abs_store, int cmp );
-int pjg_aavrg_context( unsigned short** abs_coeffs, int* weights, int pos, int p_y, int p_x, int r_x );
-int pjg_lakh_context( signed short** coeffs_x, signed short** coeffs_a, int* pred_cf, int pos );
-
-void get_context_nnb( int pos, int w, int *a, int *b );
-void get_context_hor( int pos, int w, int *a, int *b );
-void get_context_ver( int pos, int w, int *a, int *b );
-void get_context_dia( int cmp, int dpos, int *a, int *b, int *c );
+INTERN void pjg_aavrg_prepare( unsigned short** abs_coeffs, int* weights, unsigned short* abs_store, int cmp );
+INTERN int pjg_aavrg_context( unsigned short** abs_coeffs, int* weights, int pos, int p_y, int p_x, int r_x );
+INTERN int pjg_lakh_context( signed short** coeffs_x, signed short** coeffs_a, int* pred_cf, int pos );
+INTERN void get_context_nnb( int pos, int w, int *a, int *b );
 
 
 /* -----------------------------------------------
 	function declarations: DCT
 	----------------------------------------------- */
 
-int idct_2d_fst_8x8( int cmp, int dpos, int ix, int iy );
-int idct_2d_fst_1x8( int cmp, int dpos, int ix, int iy );
-int idct_2d_fst_8x1( int cmp, int dpos, int ix, int iy );
+#if !defined(BUILD_LIB) && defined(DEV_BUILD)
+INTERN int idct_2d_fst_8x8( int cmp, int dpos, int ix, int iy );
+#endif
+INTERN int idct_2d_fst_1x8( int cmp, int dpos, int ix, int iy );
+INTERN int idct_2d_fst_8x1( int cmp, int dpos, int ix, int iy );
 
 
 /* -----------------------------------------------
 	function declarations: prediction
 	----------------------------------------------- */
 
-int dc_coll_predictor( int cmp, int dpos );
-int dc_1ddct_predictor( int cmp, int dpos );
-int ac_pred_coeff_h( int cmp, int bpos, int dpos );
-int ac_pred_coeff_v( int cmp, int bpos, int dpos );
-int ac_pred_coeff( int* cfa, int* cfx );
-inline int plocoi( int a, int b, int c );
-inline int median_int( int* values, int size );
-inline float median_float( float* values, int size );
+#if defined( USE_PLOCOI )
+INTERN int dc_coll_predictor( int cmp, int dpos );
+#else
+INTERN int dc_1ddct_predictor( int cmp, int dpos );
+#endif
+INTERN inline int plocoi( int a, int b, int c );
+INTERN inline int median_int( int* values, int size );
+INTERN inline float median_float( float* values, int size );
 
 
 /* -----------------------------------------------
 	function declarations: miscelaneous helpers
 	----------------------------------------------- */
-
-inline void progress_bar( int current, int last );
-inline char* create_filename( const char* base, const char* extension );
-inline char* unique_filename( const char* base, const char* extension );
-inline void set_extension( char* filename, const char* extension );
-inline void add_underscore( char* filename );
-inline bool file_exists( const char* filename );
+#if !defined( BUILD_LIB )
+INTERN inline void progress_bar( int current, int last );
+INTERN inline char* create_filename( const char* base, const char* extension );
+INTERN inline char* unique_filename( const char* base, const char* extension );
+INTERN inline void set_extension( char* filename, const char* extension );
+INTERN inline void add_underscore( char* filename );
+#endif
+INTERN inline bool file_exists( const char* filename );
 
 
 /* -----------------------------------------------
@@ -506,24 +507,26 @@ inline bool file_exists( const char* filename );
 
 // these are developers functions, they are not needed
 // in any way to compress jpg or decompress pjg
-bool dump_hdr( void );
-bool dump_huf( void );
-bool dump_coll( void );
-bool dump_zdst( void );
-bool dump_file( const char* base, const char* ext, void* data, int bpv, int size );
-bool dump_errfile( void );
-bool dump_info( void );
-bool dump_dist( void );
-bool dump_pgm( void );
-
+#if !defined(BUILD_LIB) && defined(DEV_BUILD)
+INTERN int collmode; // write mode for collections: 0 -> std, 1 -> dhf, 2 -> squ, 3 -> unc
+INTERN bool dump_hdr( void );
+INTERN bool dump_huf( void );
+INTERN bool dump_coll( void );
+INTERN bool dump_zdst( void );
+INTERN bool dump_file( const char* base, const char* ext, void* data, int bpv, int size );
+INTERN bool dump_errfile( void );
+INTERN bool dump_info( void );
+INTERN bool dump_dist( void );
+INTERN bool dump_pgm( void );
+#endif
 
 
 /* -----------------------------------------------
-	gloabal variables: library only variables
+	global variables: library only variables
 	----------------------------------------------- */
 #if defined(BUILD_LIB)
-int lib_in_type;
-int lib_out_type;
+INTERN int lib_in_type;
+INTERN int lib_out_type;
 #endif
 
 
@@ -531,39 +534,39 @@ int lib_out_type;
 	global variables: data storage
 	----------------------------------------------- */
 
-unsigned short qtables[4][64];				// quantization tables
-huffCodes      hcodes[2][4];				// huffman codes
-huffTree       htrees[2][4];				// huffman decoding trees
-unsigned char  htset[2][4];					// 1 if huffman table is set
+INTERN unsigned short qtables[4][64];				// quantization tables
+INTERN huffCodes      hcodes[2][4];				// huffman codes
+INTERN huffTree       htrees[2][4];				// huffman decoding trees
+INTERN unsigned char  htset[2][4];					// 1 if huffman table is set
 
-unsigned char* grbgdata;	// garbage data
-unsigned char* hdrdata;   // header data
-unsigned char* huffdata;   // huffman coded data
-int            hufs;   // size of huffman data
-int            hdrs;   // size of header
-int            grbs;   // size of garbage
+INTERN unsigned char* grbgdata;	// garbage data
+INTERN unsigned char* hdrdata;   // header data
+INTERN unsigned char* huffdata;   // huffman coded data
+INTERN int            hufs;   // size of huffman data
+INTERN int            hdrs;   // size of header
+INTERN int            grbs;   // size of garbage
 
-unsigned int*  rstp;   // restart markers positions in huffdata
-unsigned int*  scnp;   // scan start positions in huffdata
-int            rstc;   // count of restart markers
-int            scnc;   // count of scans
-int            rsti;   // restart interval
-char           padbit;   // padbit (for huffman coding)
-unsigned char* rst_err;   // number of wrong-set RST markers per scan
+INTERN unsigned int*  rstp;   // restart markers positions in huffdata
+INTERN unsigned int*  scnp;   // scan start positions in huffdata
+INTERN int            rstc;   // count of restart markers
+INTERN int            scnc;   // count of scans
+INTERN int            rsti;   // restart interval
+INTERN char           padbit;   // padbit (for huffman coding)
+INTERN unsigned char* rst_err;   // number of wrong-set RST markers per scan
 
-unsigned char* zdstdata[4]; // zero distribution (# of non-zeroes) lists (for higher 7x7 block)
-unsigned char* eobxhigh[4]; // eob in x direction (for higher 7x7 block)
-unsigned char* eobyhigh[4]; // eob in y direction (for higher 7x7 block)
-unsigned char* zdstxlow[4]; // # of non zeroes for first row
-unsigned char* zdstylow[4]; // # of non zeroes for first collumn
-signed short*  colldata[4][64]; // collection sorted DCT coefficients
+INTERN unsigned char* zdstdata[4]; // zero distribution (# of non-zeroes) lists (for higher 7x7 block)
+INTERN unsigned char* eobxhigh[4]; // eob in x direction (for higher 7x7 block)
+INTERN unsigned char* eobyhigh[4]; // eob in y direction (for higher 7x7 block)
+INTERN unsigned char* zdstxlow[4]; // # of non zeroes for first row
+INTERN unsigned char* zdstylow[4]; // # of non zeroes for first collumn
+INTERN signed short*  colldata[4][64]; // collection sorted DCT coefficients
 
-unsigned char* freqscan[4]; // optimized order for frequency scans (only pointers to scans)
-unsigned char  zsrtscan[4][64];				// zero optimized frequency scan
+INTERN unsigned char* freqscan[4]; // optimized order for frequency scans (only pointers to scans)
+INTERN unsigned char  zsrtscan[4][64];				// zero optimized frequency scan
 
-int adpt_idct_8x8[ 4 ][ 8 * 8 * 8 * 8 ];	// precalculated/adapted values for idct (8x8)
-int adpt_idct_1x8[ 4 ][ 1 * 1 * 8 * 8 ];	// precalculated/adapted values for idct (1x8)
-int adpt_idct_8x1[ 4 ][ 8 * 8 * 1 * 1 ];	// precalculated/adapted values for idct (8x1)
+INTERN int adpt_idct_8x8[ 4 ][ 8 * 8 * 8 * 8 ];	// precalculated/adapted values for idct (8x8)
+INTERN int adpt_idct_1x8[ 4 ][ 1 * 1 * 8 * 8 ];	// precalculated/adapted values for idct (1x8)
+INTERN int adpt_idct_8x1[ 4 ][ 8 * 8 * 1 * 1 ];	// precalculated/adapted values for idct (8x1)
 
 
 /* -----------------------------------------------
@@ -571,67 +574,63 @@ int adpt_idct_8x1[ 4 ][ 8 * 8 * 1 * 1 ];	// precalculated/adapted values for idc
 	----------------------------------------------- */
 
 // seperate info for each color component
-componentInfo cmpnfo[ 4 ];
+INTERN componentInfo cmpnfo[ 4 ];
 
-int cmpc; // component count
-int imgwidth; // width of image
-int imgheight; // height of image
+INTERN int cmpc; // component count
+INTERN int imgwidth; // width of image
+INTERN int imgheight; // height of image
 
-int sfhm; // max horizontal sample factor
-int sfvm; // max verical sample factor
-int mcuv; // mcus per line
-int mcuh; // mcus per collumn
-int mcuc; // count of mcus
+INTERN int sfhm; // max horizontal sample factor
+INTERN int sfvm; // max verical sample factor
+INTERN int mcuv; // mcus per line
+INTERN int mcuh; // mcus per collumn
+INTERN int mcuc; // count of mcus
 
 
 /* -----------------------------------------------
 	global variables: info about current scan
 	----------------------------------------------- */
 
-int cs_cmpc; // component count in current scan
-int cs_cmp[ 4 ]; // component numbers  in current scan
-int cs_from; // begin - band of current scan ( inclusive )
-int cs_to; // end - band of current scan ( inclusive )
-int cs_sah; // successive approximation bit pos high
-int cs_sal; // successive approximation bit pos low
+INTERN int cs_cmpc; // component count in current scan
+INTERN int cs_cmp[ 4 ]; // component numbers  in current scan
+INTERN int cs_from; // begin - band of current scan ( inclusive )
+INTERN int cs_to; // end - band of current scan ( inclusive )
+INTERN int cs_sah; // successive approximation bit pos high
+INTERN int cs_sal; // successive approximation bit pos low
 	
 
 /* -----------------------------------------------
 	global variables: info about files
 	----------------------------------------------- */
 	
-char*  jpgfilename;			// name of JPEG file
-char*  pjgfilename;			// name of PJG file
-char*  tmpfilename;			// temporary file name
-char*  basfilename;			// base file name
-
-int    jpgfilesize;			// size of JPEG file
-int    pjgfilesize;			// size of PJG file
-int    jpegtype;		// type of JPEG coding: 0->unknown, 1->sequential, 2->progressive
-F_TYPE filetype;			// type of current file
-
-iostream* str_in;	// input stream
-iostream* str_out;	// output stream
-iostream* str_str;	// storage stream
+INTERN char*  jpgfilename;			// name of JPEG file
+INTERN char*  pjgfilename;			// name of PJG file
+INTERN int    jpgfilesize;			// size of JPEG file
+INTERN int    pjgfilesize;			// size of PJG file
+INTERN int    jpegtype;			// type of JPEG coding: 0->unknown, 1->sequential, 2->progressive
+INTERN int    filetype;				// type of current file
+INTERN iostream* str_in;	// input stream
+INTERN iostream* str_out;	// output stream
 
 #if !defined(BUILD_LIB)
-char** filelist;		// list of files to process 
-int    file_cnt;		// count of files in list
-int    file_no;		// number of current file
+INTERN iostream* str_str;	// storage stream
+INTERN char** filelist;		// list of files to process 
+INTERN int    file_cnt;		// count of files in list
+INTERN int    file_no;		// number of current file
 
-char** err_list;		// list of error messages 
-int*   err_tp;		// list of error types
+INTERN char** err_list;		// list of error messages 
+INTERN int*   err_tp;		// list of error types
 #endif
 
 #if defined(DEV_INFOS)
-int    dev_size_hdr;
-int    dev_size_cmp[ 4 ];
-int    dev_size_zsr[ 4 ];
-int    dev_size_dc[ 4 ];
-int    dev_size_ach[ 4 ];
-int    dev_size_acl[ 4 ];
-int    dev_size_zdh[ 4 ];
-int    dev_size_zdl[ 4 ];
+INTERN int    dev_size_hdr      = 0;
+INTERN int    dev_size_cmp[ 4 ] = { 0 };
+INTERN int    dev_size_zsr[ 4 ] = { 0 };
+INTERN int    dev_size_dc[ 4 ]  = { 0 };
+INTERN int    dev_size_ach[ 4 ] = { 0 };
+INTERN int    dev_size_acl[ 4 ] = { 0 };
+INTERN int    dev_size_zdh[ 4 ] = { 0 };
+INTERN int    dev_size_zdl[ 4 ] = { 0 };
 #endif
 
 
@@ -639,10 +638,9 @@ int    dev_size_zdl[ 4 ];
 	global variables: messages
 	----------------------------------------------- */
 
-char statusmessage[ MSG_SIZE ];
-char errormessage [ MSG_SIZE ];
-bool (packJPG::*errorfunction)();
-int  errorlevel;
+INTERN char errormessage [ MSG_SIZE ];
+INTERN bool (packJPG::*errorfunction)();
+INTERN int  errorlevel;
 // meaning of errorlevel:
 // -1 -> wrong input
 // 0 -> no error
@@ -654,24 +652,32 @@ int  errorlevel;
 	global variables: settings
 	----------------------------------------------- */
 
-int  verbosity;		// level of verbosity
-bool overwrite;	// overwrite files yes / no
-bool pause;		// pause after finished yes / no
-int  verify_lv;		// verification level ( none (0), simple (1), detailed output (2) )
-int  err_tol;		// error threshold ( proceed on warnings yes (2) / no (1) )
-bool disc_meta;	// discard meta-info yes / no
+#if !defined( BUILD_LIB )
+INTERN int  verbosity;		// level of verbosity
+INTERN bool overwrite;	// overwrite files yes / no
+INTERN bool wait_exit;		// pause after finished yes / no
+INTERN int  verify_lv;		// verification level ( none (0), simple (1), detailed output (2) )
+INTERN int  err_tol;		// error threshold ( proceed on warnings yes (2) / no (1) )
+INTERN bool disc_meta;	// discard meta-info yes / no
 
-bool developer;	// allow developers functions yes/no
-bool auto_set;		// automatic find best settings yes/no
-ACTION action;		// what to do with JPEG/PJG files
-int  collmode;		// write mode for collections: 0 -> std, 1 -> dhf, 2 -> squ, 3 -> unc
+INTERN bool developer;	// allow developers functions yes/no
+INTERN bool auto_set;		// automatic find best settings yes/no
+INTERN int action;		// what to do with JPEG/PJG files
 
-FILE*  msgout;	// stream for output of messages
-bool   pipe_on;	// use stdin/stdout instead of filelist
+INTERN FILE*  msgout;	// stream for output of messages
+INTERN bool   pipe_on;	// use stdin/stdout instead of filelist
+#else
+INTERN int  err_tol;		// error threshold ( proceed on warnings yes (2) / no (1) )
+INTERN bool disc_meta;	// discard meta-info yes / no
+INTERN bool auto_set;	// automatic find best settings yes/no
+INTERN int  action;// what to do with JPEG/PJG files
+#endif
 
-unsigned char nois_trs[ 4 ]; // bit pattern noise threshold
-unsigned char segm_cnt[ 4 ]; // number of segments
-unsigned char orig_set[ 8 ];     // store array for settings
+INTERN unsigned char nois_trs[ 4 ]; // bit pattern noise threshold
+INTERN unsigned char segm_cnt[ 4 ]; // number of segments
+#if !defined( BUILD_LIB )
+INTERN unsigned char orig_set[ 8 ];     // store array for settings
+#endif
 
 
 public:
@@ -691,24 +697,27 @@ int main( int argc, char** argv );
 	global variables: info about program
 	----------------------------------------------- */
 
-const unsigned char pjgversion   = 25;
-static const char*  subversion   = "a";
-static const char*  apptitle     = "packJPG";
-static const char*  appname      = "packjpg";
-static const char*  versiondate  = "12/12/2011";
-static const char*  author       = "Matthias Stirner / Se";
+INTERN const unsigned char appversion = 25;
+INTERN const char*  subversion   = "f";
+INTERN const char*  apptitle     = "packJPG";
+INTERN const char*  appname      = "packjpg";
+INTERN const char*  versiondate  = "02/24/2013";
+INTERN const char*  author       = "Matthias Stirner / Se";
 #if !defined(BUILD_LIB)
-static const char*  website      = "http://www.elektronik.htw-aalen.de/packjpg/";
-static const char*	copyright    = "2006-2011 HTW Aalen University & Matthias Stirner";
-static const char*  email        = "packjpg (at) htw-aalen.de";
-static const char*  pjg_ext      = "pjg";
-static const char*  jpg_ext      = "jpg";
+INTERN const char*  website      = "http://www.elektronik.htw-aalen.de/packjpg/";
+INTERN const char*	copyright    = "2006-2013 HTW Aalen University & Matthias Stirner";
+INTERN const char*  email        = "packjpg (at) htw-aalen.de";
+INTERN const char*  pjg_ext      = "pjg";
+INTERN const char*  jpg_ext      = "jpg";
 #endif
-static const char   pjg_header[] = { 'J', 'S' };
+INTERN const char   pjg_magic[] = { 'J', 'S' };
 
 
 
 packJPG::packJPG(void) {
+    #if !defined(BUILD_LIB) && defined(DEV_BUILD)
+    collmode = 0;
+    #endif
     #if defined(BUILD_LIB)
     lib_in_type  = -1;
     lib_out_type = -1;
@@ -719,7 +728,7 @@ packJPG::packJPG(void) {
         global variables: data storage
         ----------------------------------------------- */
 
-    grbgdata			= 	NULL;	// garbage data
+    grbgdata         =   NULL;   // garbage data
     hdrdata          =   NULL;   // header data
     huffdata         =   NULL;   // huffman coded data
     hufs             =    0  ;   // size of huffman data
@@ -732,7 +741,7 @@ packJPG::packJPG(void) {
     scnc             =    0  ;   // count of scans
     rsti             =    0  ;   // restart interval
     padbit           =    -1 ;   // padbit (for huffman coding)
-    rst_err			=   NULL;   // number of wrong-set RST markers per scan
+    rst_err          =   NULL;   // number of wrong-set RST markers per scan
 
 	#define CLEAR_ARRAY_SGL(a) memset(a, 0, sizeof(a))
 	CLEAR_ARRAY_SGL(zdstdata);
@@ -781,17 +790,15 @@ packJPG::packJPG(void) {
 
 	jpgfilename = NULL; // !added
 	pjgfilename = NULL; // !added
-	tmpfilename = NULL; // !added
-	basfilename = NULL; // !added
 	jpgfilesize = 0; // !added
 	pjgfilesize = 0; // !added
     jpegtype = 0;		// type of JPEG coding: 0->unknown, 1->sequential, 2->progressive
 
     str_in  = NULL;	// input stream
     str_out = NULL;	// output stream
-    str_str = NULL;	// storage stream
 
     #if !defined(BUILD_LIB)
+    str_str = NULL;	// storage stream
     filelist = NULL;		// list of files to process 
     file_cnt = 0;		// count of files in list
     file_no  = 0;		// number of current file
@@ -823,22 +830,26 @@ packJPG::packJPG(void) {
     /* -----------------------------------------------
         global variables: settings
         ----------------------------------------------- */
-
+#if !defined( BUILD_LIB )
     verbosity  = -1;		// level of verbosity
     overwrite  = false;	// overwrite files yes / no
-    pause      = true;		// pause after finished yes / no
+    wait_exit      = true;		// pause after finished yes / no
     verify_lv  = 0;		// verification level ( none (0), simple (1), detailed output (2) )
     err_tol    = 1;		// error threshold ( proceed on warnings yes (2) / no (1) )
     disc_meta  = false;	// discard meta-info yes / no
 
     developer  = false;	// allow developers functions yes/no
     auto_set   = true;		// automatic find best settings yes/no
-    action   = comp;		// what to do with JPEG/PJG files
-    collmode   = 0;		// write mode for collections: 0 -> std, 1 -> dhf, 2 -> squ, 3 -> unc
+    action   = A_COMPRESS;// what to do with JPEG/PJG files
 
-    msgout   = stdout;	// stream for output of messages
+    msgout   = stdout;// stream for output of messages
     pipe_on  = false;	// use stdin/stdout instead of filelist
-
+#else
+    err_tol    = 1;		// error threshold ( proceed on warnings yes (2) / no (1) )
+    disc_meta  = false;	// discard meta-info yes / no
+    auto_set   = true;		// automatic find best settings yes/no
+    action   = A_COMPRESS;// what to do with JPEG/PJG files
+#endif
 	nois_trs[0] = 6; // bit pattern noise threshold
 	nois_trs[1] = 6;
 	nois_trs[2] = 6;
@@ -847,8 +858,10 @@ packJPG::packJPG(void) {
     segm_cnt[1] = 10;
     segm_cnt[2] = 10;
     segm_cnt[3] = 10;
-	CLEAR_ARRAY_SGL(orig_set);
+#if !defined( BUILD_LIB )
     //orig_set[0] = 0;     // store array for settings
+    CLEAR_ARRAY_SGL(orig_set);
+#endif
 
 }
 
@@ -861,7 +874,6 @@ packJPG::packJPG(void) {
 #if !defined(BUILD_LIB)
 int packJPG::main( int argc, char** argv )
 {	
-	sprintf( statusmessage, "no statusmessage specified" );
 	sprintf( errormessage, "no errormessage specified" );
 	
 	clock_t begin, end;
@@ -869,11 +881,12 @@ int packJPG::main( int argc, char** argv )
 	int error_cnt = 0;
 	int warn_cnt  = 0;
 	
-	int acc_jpgsize = 0;
-	int acc_pjgsize = 0;
+	double acc_jpgsize = 0;
+	double acc_pjgsize = 0;
 	
-	int total, bpms;
-	float cr;
+	int kbps;
+	double cr;
+	double total;
 	
 	errorlevel = 0;
 	
@@ -883,12 +896,12 @@ int packJPG::main( int argc, char** argv )
 	
 	// write program info to screen
 	fprintf( msgout,  "\n--> %s v%i.%i%s (%s) by %s <--\n",
-			apptitle, pjgversion / 10, pjgversion % 10, subversion, versiondate, author );
+			apptitle, appversion / 10, appversion % 10, subversion, versiondate, author );
 	fprintf( msgout, "Copyright %s\nAll rights reserved\n\n", copyright );
 	
 	// check if user input is wrong, show help screen if it is
 	if ( ( file_cnt == 0 ) ||
-		( ( !developer ) && ( (action != comp) || (!auto_set) || (verify_lv > 1) ) ) ) {
+		( ( !developer ) && ( (action != A_COMPRESS) || (!auto_set) || (verify_lv > 1) ) ) ) {
 		show_help();
 		return -1;
 	}
@@ -910,7 +923,7 @@ int packJPG::main( int argc, char** argv )
 	// process file(s) - this is the main function routine
 	begin = clock();
 	for ( file_no = 0; file_no < file_cnt; file_no++ ) {	
-		// file sizes
+		// process current file
 		process_ui();
 		// store error message and type if any
 		if ( errorlevel > 0 ) {
@@ -956,19 +969,21 @@ int packJPG::main( int argc, char** argv )
 	// show statistics
 	fprintf( msgout,  "\n\n-> %i file(s) processed, %i error(s), %i warning(s)\n",
 		file_cnt, error_cnt, warn_cnt );
-	if ( ( file_cnt > error_cnt ) && ( verbosity != 0 ) && ( action == comp ) ) {
-		total = (int) ( (double) (( end - begin ) * 1000) / CLOCKS_PER_SEC ); 
-		bpms  = ( total > 0 ) ? ( acc_jpgsize / total ) : acc_jpgsize;
+	if ( ( file_cnt > error_cnt ) && ( verbosity != 0 ) &&
+	 ( action == A_COMPRESS ) ) {
+		acc_jpgsize /= 1024.0; acc_pjgsize /= 1024.0;
+		total = (double) ( end - begin ) / CLOCKS_PER_SEC; 
+		kbps  = ( total > 0 ) ? ( acc_jpgsize / total ) : acc_jpgsize;
 		cr    = ( acc_jpgsize > 0 ) ? ( 100.0 * acc_pjgsize / acc_jpgsize ) : 0;
 		
 		fprintf( msgout,  " --------------------------------- \n" );
 		if ( total >= 0 ) {
-			fprintf( msgout,  " total time        : %8i msec\n", total );
-			fprintf( msgout,  " avrg. byte per ms : %8i byte\n", bpms );
+			fprintf( msgout,  " total time        : %8.2f sec\n", total );
+			fprintf( msgout,  " avrg. kbyte per s : %8i byte\n", kbps );
 		}
 		else {
-			fprintf( msgout,  " total time        : %8s msec\n", "N/A" );
-			fprintf( msgout,  " avrg. byte per ms : %8s byte\n", "N/A" );
+			fprintf( msgout,  " total time        : %8s sec\n", "N/A" );
+			fprintf( msgout,  " avrg. kbyte per s : %8s byte\n", "N/A" );
 		}
 		fprintf( msgout,  " avrg. comp. ratio : %8.2f %%\n", cr );		
 		fprintf( msgout,  " --------------------------------- \n" );
@@ -995,17 +1010,15 @@ int packJPG::main( int argc, char** argv )
 	}
 	
 	// pause before exit
-	if ( pause && ( msgout != stderr ) ) {
+	if ( wait_exit && ( msgout != stderr ) ) {
 		fprintf( msgout, "\n\n< press ENTER >\n" );
 		fgetc( stdin );
 	}
 	
 	
-	return file_cnt;
+	return 0;
 }
 #endif
-
-
 
 /* ----------------------- Begin of library only functions -------------------------- */
 
@@ -1014,7 +1027,7 @@ int packJPG::main( int argc, char** argv )
 	----------------------------------------------- */
 	
 #if defined(BUILD_LIB)
-bool packJPG::pjglib_convert_stream2stream( char* msg )
+EXPORT bool packJPG::pjglib_convert_stream2stream( char* msg )
 {
 	// process in main function
 	return pjglib_convert_stream2mem( NULL, NULL, msg ); 
@@ -1027,7 +1040,7 @@ bool packJPG::pjglib_convert_stream2stream( char* msg )
 	----------------------------------------------- */
 
 #if defined(BUILD_LIB)
-bool packJPG::pjglib_convert_file2file( char* in, char* out, char* msg )
+EXPORT bool packJPG::pjglib_convert_file2file( char* in, char* out, char* msg )
 {
 	// init streams
 	pjglib_init_streams( (void*) in, 0, 0, (void*) out, 0 );
@@ -1043,7 +1056,7 @@ bool packJPG::pjglib_convert_file2file( char* in, char* out, char* msg )
 	----------------------------------------------- */
 	
 #if defined(BUILD_LIB)
-bool packJPG::pjglib_convert_stream2mem( unsigned char** out_file, unsigned int* out_size, char* msg )
+EXPORT bool packJPG::pjglib_convert_stream2mem( unsigned char** out_file, unsigned int* out_size, char* msg )
 {
 	clock_t begin, end;
 	int total;
@@ -1055,7 +1068,7 @@ bool packJPG::pjglib_convert_stream2mem( unsigned char** out_file, unsigned int*
 	
 	// (re)set buffers
 	reset_buffers();
-	action = comp;
+	action = A_COMPRESS;
 	
 	// main compression / decompression routines
 	begin = clock();
@@ -1079,9 +1092,9 @@ bool packJPG::pjglib_convert_stream2mem( unsigned char** out_file, unsigned int*
 	// copy errormessage / remove files if error (and output is file)
 	if ( errorlevel >= err_tol ) {
 		if ( lib_out_type == 0 ) {
-			if ( filetype == JPEG ) {
+			if ( filetype == F_JPG ) {
 				if ( file_exists( pjgfilename ) ) remove( pjgfilename );
-			} else if ( filetype == PJG ) {
+			} else if ( filetype == F_PJG ) {
 				if ( file_exists( jpgfilename ) ) remove( jpgfilename );
 			}
 		}
@@ -1091,22 +1104,21 @@ bool packJPG::pjglib_convert_stream2mem( unsigned char** out_file, unsigned int*
 	
 	// get compression info
 	total = (int) ( (double) (( end - begin ) * 1000) / CLOCKS_PER_SEC );
-	// bpms  = ( total > 0 ) ? ( jpgfilesize / total ) : jpgfilesize;
 	cr    = ( jpgfilesize > 0 ) ? ( 100.0 * pjgfilesize / jpgfilesize ) : 0;
 	
 	// write success message else
 	if ( msg != NULL ) {
 		switch( filetype )
 		{
-			case JPEG:
+			case F_JPG:
 				sprintf( msg, "Compressed to %s (%.2f%%) in %ims",
 					pjgfilename, cr, ( total >= 0 ) ? total : -1 );
 				break;
-			case PJG:
+			case F_PJG:
 				sprintf( msg, "Decompressed to %s (%.2f%%) in %ims",
 					jpgfilename, cr, ( total >= 0 ) ? total : -1 );
 				break;
-			case UNK:
+			case F_UNK:
 				sprintf( msg, "Unknown filetype" );
 				break;	
 		}
@@ -1123,7 +1135,7 @@ bool packJPG::pjglib_convert_stream2mem( unsigned char** out_file, unsigned int*
 	----------------------------------------------- */
 	
 #if defined(BUILD_LIB)
-void packJPG::pjglib_init_streams( void* in_src, int in_type, int in_size, void* out_dest, int out_type )
+EXPORT void packJPG::pjglib_init_streams( void* in_src, int in_type, int in_size, void* out_dest, int out_type )
 {
 	/* a short reminder about input/output stream types:
 	
@@ -1180,16 +1192,16 @@ void packJPG::pjglib_init_streams( void* in_src, int in_type, int in_size, void*
 	str_in->read( buffer, 1, 2 );
 	if ( ( buffer[0] == 0xFF ) && ( buffer[1] == 0xD8 ) ) {
 		// file is JPEG
-		filetype = JPEG;
+		filetype = F_JPG;
 		// copy filenames
 		jpgfilename = (char*) calloc( (  in_type == 0 ) ? strlen( (char*) in_src   ) + 1 : 32, sizeof( char ) );
 		pjgfilename = (char*) calloc( ( out_type == 0 ) ? strlen( (char*) out_dest ) + 1 : 32, sizeof( char ) );
 		strcpy( jpgfilename, (  in_type == 0 ) ? (char*) in_src   : "JPG in memory" );
 		strcpy( pjgfilename, ( out_type == 0 ) ? (char*) out_dest : "PJG in memory" );
 	}
-	else if ( (buffer[0] == pjg_header[0]) && (buffer[1] == pjg_header[1]) ) {
+	else if ( (buffer[0] == pjg_magic[0]) && (buffer[1] == pjg_magic[1]) ) {
 		// file is PJG
-		filetype = PJG;
+		filetype = F_PJG;
 		// copy filenames
 		pjgfilename = (char*) calloc( (  in_type == 0 ) ? strlen( (char*) in_src   ) + 1 : 32, sizeof( char ) );
 		jpgfilename = (char*) calloc( ( out_type == 0 ) ? strlen( (char*) out_dest ) + 1 : 32, sizeof( char ) );
@@ -1198,7 +1210,7 @@ void packJPG::pjglib_init_streams( void* in_src, int in_type, int in_size, void*
 	}
 	else {
 		// file is neither
-		filetype = UNK;
+		filetype = F_UNK;
 		sprintf( errormessage, "filetype of input stream is unknown" );
 		errorlevel = 2;
 		return;
@@ -1216,11 +1228,33 @@ void packJPG::pjglib_init_streams( void* in_src, int in_type, int in_size, void*
 	----------------------------------------------- */
 	
 #if defined(BUILD_LIB)
-EXPORT void pjglib_version_info( char* msg )
+EXPORT const char* pjglib_version_info( void )
 {
+	static char v_info[ 256 ];
+	
 	// copy version info to string
-	sprintf( msg, "--> %s library v%i.%i%s (%s) by %s <--",
-			apptitle, pjgversion / 10, pjgversion % 10, subversion, versiondate, author );
+	sprintf( v_info, "--> %s library v%i.%i%s (%s) by %s <--",
+			apptitle, appversion / 10, appversion % 10, subversion, versiondate, author );
+			
+	return (const char*) v_info;
+}
+#endif
+
+
+/* -----------------------------------------------
+	DLL export version information
+	----------------------------------------------- */
+	
+#if defined(BUILD_LIB)
+EXPORT const char* pjglib_short_name( void )
+{
+	static char v_name[ 256 ];
+	
+	// copy version info to string
+	sprintf( v_name, "%s v%i.%i%s",
+			apptitle, appversion / 10, appversion % 10, subversion );
+			
+	return (const char*) v_name;
 }
 #endif
 
@@ -1234,7 +1268,7 @@ EXPORT void pjglib_version_info( char* msg )
 	----------------------------------------------- */
 	
 #if !defined(BUILD_LIB)	
-void packJPG::initialize_options( int argc, char** argv )
+INTERN void packJPG::initialize_options( int argc, char** argv )
 {	
 	int tmp_val;
 	char** tmp_flp;
@@ -1272,7 +1306,7 @@ void packJPG::initialize_options( int argc, char** argv )
 			verbosity = -1;
 		}
 		else if ( strcmp((*argv), "-np" ) == 0 ) {
-			pause = false;
+			wait_exit = false;
 		}
 		else if ( strcmp((*argv), "-o" ) == 0 ) {
 			overwrite = true;
@@ -1322,31 +1356,31 @@ void packJPG::initialize_options( int argc, char** argv )
 			tmp_val = ( tmp_val < 0 ) ? 0 : tmp_val;
 			tmp_val = ( tmp_val > 5 ) ? 5 : tmp_val;
 			collmode = tmp_val;
-			action = coll;
+			action = A_COLL_DUMP;
 		}
 		else if ( sscanf( (*argv), "-fcol%i", &tmp_val ) == 1 ) {
 			tmp_val = ( tmp_val < 0 ) ? 0 : tmp_val;
 			tmp_val = ( tmp_val > 5 ) ? 5 : tmp_val;
 			collmode = tmp_val;
-			action = fcoll;
+			action = A_FCOLL_DUMP;
 		}
 		else if ( strcmp((*argv), "-split") == 0 ) {
-			action = split;
+			action = A_SPLIT_DUMP;
 		}
 		else if ( strcmp((*argv), "-zdst") == 0 ) {
-			action = zdst;
+			action = A_ZDST_DUMP;
 		}	
 		else if ( strcmp((*argv), "-info") == 0 ) {
-			action = info;
+			action = A_TXT_INFO;
 		}
 		else if ( strcmp((*argv), "-dist") == 0 ) {
-			action = dist;
+			action = A_DIST_INFO;
 		}
 		else if ( strcmp((*argv), "-pgm") == 0 ) {
-			action = pgm;
+			action = A_PGM_DUMP;
 		}
 	   	else if ( ( strcmp((*argv), "-comp") == 0) ) {
-			action = comp;
+			action = A_COMPRESS;
 		}
 		#endif
 		else if ( strcmp((*argv), "-") == 0 ) {
@@ -1392,7 +1426,7 @@ void packJPG::initialize_options( int argc, char** argv )
 	----------------------------------------------- */
 	
 #if !defined(BUILD_LIB)
-void packJPG::process_ui( void )
+INTERN void packJPG::process_ui( void )
 {
 	clock_t begin, end;
 	const char* actionmsg  = NULL;
@@ -1406,11 +1440,11 @@ void packJPG::process_ui( void )
 	jpgfilesize = 0;
 	pjgfilesize = 0;	
 	#if !defined(DEV_BUILD)
-	action = comp;
+	action = A_COMPRESS;
 	#endif
 	
 	// compare file name, set pipe if needed
-	if ( ( strcmp( filelist[ file_no ], "-" ) == 0 ) && ( action == comp ) ) {
+	if ( ( strcmp( filelist[ file_no ], "-" ) == 0 ) && ( action == A_COMPRESS ) ) {
 		pipe_on = true;
 		filelist[ file_no ] = (char*) "STDIN";
 	}
@@ -1429,16 +1463,16 @@ void packJPG::process_ui( void )
 		execute( &packJPG::check_file );
 		
 		// get specific action message
-		if ( filetype == UNK ) actionmsg = "unknown filetype";
+		if ( filetype == F_UNK ) actionmsg = "unknown filetype";
 		else switch ( action ) {
-			case comp:	actionmsg = ( filetype == JPEG ) ? "Compressing" : "Decompressing";	break;			
-			case split:	actionmsg = "Splitting"; break;			
-			case coll:	actionmsg = "Extracting Colls"; break;
-			case fcoll:	actionmsg = "Extracting FColls"; break;
-			case zdst:	actionmsg = "Extracting ZDST lists"; break;			
-			case info:	actionmsg = "Extracting info"; break;		
-			case dist:	actionmsg = "Extracting distributions";	break;		
-			case pgm:	actionmsg = "Converting"; break;
+			case A_COMPRESS:	actionmsg = ( filetype == F_JPG ) ? "Compressing" : "Decompressing";	break;			
+			case A_SPLIT_DUMP:	actionmsg = "Splitting"; break;			
+			case A_COLL_DUMP:	actionmsg = "Extracting Colls"; break;
+			case A_FCOLL_DUMP:	actionmsg = "Extracting FColls"; break;
+			case A_ZDST_DUMP:	actionmsg = "Extracting ZDST lists"; break;			
+			case A_TXT_INFO:	actionmsg = "Extracting info"; break;		
+			case A_DIST_INFO:	actionmsg = "Extracting distributions";	break;		
+			case A_PGM_DUMP:	actionmsg = "Converting"; break;
 		}
 		
 		if ( verbosity < 2 ) fprintf( msgout, "%s -> ", actionmsg );
@@ -1450,6 +1484,7 @@ void packJPG::process_ui( void )
 		fprintf( msgout, "\r" );
 		execute( &packJPG::check_file );
 	}
+	fflush( msgout );
 	
 	
 	// main function routine
@@ -1463,17 +1498,13 @@ void packJPG::process_ui( void )
 	if ( str_out != NULL ) delete( str_out ); str_out = NULL;
 	if ( str_str != NULL ) delete( str_str ); str_str = NULL;
 	// delete if broken or if output not needed
-	if ( ( !pipe_on ) && ( ( errorlevel >= err_tol ) || ( action != comp ) ) ) {
-		if ( filetype == JPEG ) {
+	if ( ( !pipe_on ) && ( ( errorlevel >= err_tol ) || ( action != A_COMPRESS ) ) ) {
+		if ( filetype == F_JPG ) {
 			if ( file_exists( pjgfilename ) ) remove( pjgfilename );
-		} else if ( filetype == PJG ) {
+		} else if ( filetype == F_PJG ) {
 			if ( file_exists( jpgfilename ) ) remove( jpgfilename );
 		}
 	}
-	// remove temp file
-	if ( ( file_exists( tmpfilename ) ) &&
-		!( ( verify_lv > 1 ) && ( errorlevel >= err_tol ) && ( errorfunction == &packJPG::compare_output ) ) )
-		remove( tmpfilename );
 	
 	end = clock();	
 	
@@ -1491,7 +1522,7 @@ void packJPG::process_ui( void )
 		switch ( verbosity ) {
 			case 0:			
 				if ( errorlevel < err_tol ) {
-					if ( action == comp ) fprintf( msgout,  "%.2f%%", cr );
+					if ( action == A_COMPRESS ) fprintf( msgout,  "%.2f%%", cr );
 					else fprintf( msgout, "DONE" );
 				}
 				else fprintf( msgout,  "ERROR" );
@@ -1517,11 +1548,10 @@ void packJPG::process_ui( void )
 		
 		// error/ warning message
 		if ( errorlevel > 0 ) {
-			get_status( errorfunction );
-			fprintf( msgout, " %s -> %s:\n", statusmessage, errtypemsg  );
+			fprintf( msgout, " %s -> %s:\n", get_status( errorfunction ), errtypemsg  );
 			fprintf( msgout, " %s\n", errormessage );
 		}
-		if ( (verbosity > 0) && (errorlevel < err_tol) && (action == comp) ) {
+		if ( (verbosity > 0) && (errorlevel < err_tol) && (action == A_COMPRESS) ) {
 			if ( total >= 0 ) {
 				fprintf( msgout,  " time taken  : %7i msec\n", total );
 				fprintf( msgout,  " byte per ms : %7i byte\n", bpms );
@@ -1532,7 +1562,7 @@ void packJPG::process_ui( void )
 			}
 			fprintf( msgout,  " comp. ratio : %7.2f %%\n", cr );		
 		}	
-		if ( ( verbosity > 1 ) && ( action == comp ) )
+		if ( ( verbosity > 1 ) && ( action == A_COMPRESS ) )
 			fprintf( msgout,  "\n" );
 	}
 	else { // progress bar UI
@@ -1549,307 +1579,66 @@ void packJPG::process_ui( void )
 
 
 /* -----------------------------------------------
-	processes one file
-	----------------------------------------------- */
-
-void packJPG::process_file( void )
-{	
-	if ( filetype == JPEG ) {
-		switch ( action ) {
-			case comp:
-				execute( &packJPG::read_jpeg );
-				execute( &packJPG::decode_jpeg );
-				execute( &packJPG::check_value_range );
-				execute( &packJPG::adapt_icos );
-				execute( &packJPG::predict_dc );
-				execute( &packJPG::calc_zdst_lists );
-				execute( &packJPG::pack_pjg );
-				#if !defined(BUILD_LIB)	
-				if ( verify_lv > 0 ) { // verifcation
-					execute( &packJPG::reset_buffers );
-					execute( &packJPG::swap_streams );
-					execute( &packJPG::unpack_pjg );
-					execute( &packJPG::adapt_icos );
-					execute( &packJPG::unpredict_dc );
-					execute( &packJPG::recode_jpeg );
-					execute( &packJPG::merge_jpeg );
-					execute( &packJPG::compare_output );
-				}
-				#endif
-				break;
-				
-			#if !defined(BUILD_LIB) && defined(DEV_BUILD)
-			case split:
-				execute( &packJPG::read_jpeg );
-				execute( &packJPG::dump_hdr );
-				execute( &packJPG::dump_huf );
-				break;
-				
-			case coll:
-				execute( &packJPG::read_jpeg );
-				execute( &packJPG::decode_jpeg );
-				execute( &packJPG::dump_coll );
-				break;
-				
-			case fcoll:
-				execute( &packJPG::read_jpeg );
-				execute( &packJPG::decode_jpeg );
-				execute( &packJPG::check_value_range );
-				execute( &packJPG::adapt_icos );
-				execute( &packJPG::predict_dc );
-				execute( &packJPG::dump_coll );
-				break;
-				
-			case zdst:
-				execute( &packJPG::read_jpeg );
-				execute( &packJPG::decode_jpeg );
-				execute( &packJPG::check_value_range );
-				execute( &packJPG::adapt_icos );
-				execute( &packJPG::predict_dc );
-				execute( &packJPG::calc_zdst_lists );
-				execute( &packJPG::dump_zdst );
-				break;
-				
-			case info:
-				execute( &packJPG::read_jpeg );
-				execute( &packJPG::dump_info );
-				break;
-				
-			case dist:
-				execute( &packJPG::read_jpeg );
-				execute( &packJPG::decode_jpeg );
-				execute( &packJPG::check_value_range );
-				execute( &packJPG::adapt_icos );
-				execute( &packJPG::predict_dc );
-				execute( &packJPG::dump_dist );
-				break;
-			
-			case pgm:
-				execute( &packJPG::read_jpeg );
-				execute( &packJPG::decode_jpeg );
-				execute( &packJPG::adapt_icos );
-				execute( &packJPG::dump_pgm );
-				break;
-			#else
-			default:
-				break;
-			#endif
-		}
-	}
-	else if ( filetype == PJG )	{
-		switch ( action )
-		{
-			case comp:
-				execute( &packJPG::unpack_pjg );
-				execute( &packJPG::adapt_icos );
-				execute( &packJPG::unpredict_dc );
-				execute( &packJPG::recode_jpeg );
-				execute( &packJPG::merge_jpeg );
-				#if !defined(BUILD_LIB)
-				if ( verify_lv > 0 ) { // verify
-					execute( &packJPG::reset_buffers );
-					execute( &packJPG::swap_streams );
-					execute( &packJPG::read_jpeg );
-					execute( &packJPG::decode_jpeg );
-					execute( &packJPG::check_value_range );
-					execute( &packJPG::adapt_icos );
-					execute( &packJPG::predict_dc );
-					execute( &packJPG::calc_zdst_lists );
-					execute( &packJPG::pack_pjg );
-					execute( &packJPG::compare_output );
-				}
-				#endif
-				break;
-				
-			#if !defined(BUILD_LIB) && defined(DEV_BUILD)
-			case split:
-				execute( &packJPG::unpack_pjg );
-				execute( &packJPG::adapt_icos );
-				execute( &packJPG::unpredict_dc );
-				execute( &packJPG::recode_jpeg );
-				execute( &packJPG::dump_hdr );
-				execute( &packJPG::dump_huf );
-				break;
-				
-			case coll:
-				execute( &packJPG::unpack_pjg );
-				execute( &packJPG::adapt_icos );			
-				execute( &packJPG::unpredict_dc );
-				execute( &packJPG::dump_coll );
-				break;
-				
-			case fcoll:				
-				execute( &packJPG::unpack_pjg );
-				execute( &packJPG::dump_coll );
-				break;
-				
-			case zdst:
-				execute( &packJPG::unpack_pjg );
-				execute( &packJPG::dump_zdst );
-				break;
-			
-			case info:
-				execute( &packJPG::unpack_pjg );
-				execute( &packJPG::dump_info );
-				break;
-			
-			case dist:
-				execute( &packJPG::unpack_pjg );
-				execute( &packJPG::dump_dist );
-				break;
-			
-			case pgm:
-				execute( &packJPG::unpack_pjg );
-				execute( &packJPG::adapt_icos );
-				execute( &packJPG::unpredict_dc );
-				execute( &packJPG::dump_pgm );
-				break;
-			#else
-			default:
-				break;
-			#endif
-		}
-	}	
-	#if !defined(BUILD_LIB) && defined(DEV_BUILD)
-	// write error file if verify lv > 1
-	if ( ( verify_lv > 1 ) && ( errorlevel >= err_tol ) )
-		dump_errfile();
-	#endif
-	// reset buffers
-	reset_buffers();
-}
-
-
-/* -----------------------------------------------
-	main-function execution routine
-	----------------------------------------------- */
-
-void packJPG::execute( bool (packJPG::*function)() )
-{	
-	clock_t begin, end;
-	int total;
-	bool success;
-	
-	
-	if ( errorlevel < err_tol )
-	{
-		#if !defined BUILD_LIB
-		// get statusmessage
-		get_status( function );
-		// write statusmessage
-		if ( verbosity == 2 ) {
-			fprintf( msgout,  "\n%s ", statusmessage );
-			for ( int i = strlen( statusmessage ); i <= 30; i++ )
-				fprintf( msgout,  " " );			
-		}
-		#endif
-		
-		// set starttime
-		begin = clock();
-		// call function
-		success = ( this->*function )();
-		// set endtime
-		end = clock();
-		
-		if ( ( errorlevel > 0 ) && ( errorfunction == NULL ) )
-			errorfunction = function;
-		
-		// write statusmessage
-		if ( success ) {
-			total = (int) ( (double) (( end - begin ) * 1000) / CLOCKS_PER_SEC );
-			if ( verbosity == 2 ) fprintf( msgout,  "%6ims", ( total >= 0 ) ? total : -1 );
-		}
-		else {
-			errorfunction = function;
-			if ( verbosity == 2 ) fprintf( msgout,  "%8s", "ERROR" );
-		}
-	}
-}
-
-
-/* -----------------------------------------------
 	gets statusmessage for function
 	----------------------------------------------- */
 	
 #if !defined(BUILD_LIB)
-void packJPG::get_status( bool (packJPG::*function)() )
+INTERN inline const char* packJPG::get_status( bool (packJPG::*function)() )
 {	
 	if ( function == NULL ) {
-		sprintf( statusmessage, "unknown action" );
-	}
-	else if ( function == &packJPG::check_file ) {
-		sprintf( statusmessage, "Determining filetype" );
-	}
-	else if ( function == &packJPG::read_jpeg ) {
-		sprintf( statusmessage, "Reading header & image data" );
-	}
-	else if ( function == &packJPG::merge_jpeg ) {
-		sprintf( statusmessage, "Merging header & image data" );
-	}
-	else if ( function == &packJPG::decode_jpeg ) {
-		sprintf( statusmessage, "Decompressing JPEG image data" );
-	}
-	else if ( function == &packJPG::recode_jpeg ) {
-		sprintf( statusmessage, "Recompressing JPEG image data" );
-	}
-	else if ( function == &packJPG::adapt_icos ) {
-		sprintf( statusmessage, "Adapting DCT precalc. tables" );
-	}
-	else if ( function == &packJPG::predict_dc ) {
-		sprintf( statusmessage, "Applying prediction to DC" );
-	}
-	else if ( function == &packJPG::unpredict_dc ) {
-		sprintf( statusmessage, "Removing prediction from DC" );
-	}
-	else if ( function == &packJPG::check_value_range ) {
-		sprintf( statusmessage, "Checking values range" );
-	}
-	else if ( function == &packJPG::calc_zdst_lists ) {
-		sprintf( statusmessage, "Calculating zero dist lists" );
-	}
-	else if ( function == &packJPG::pack_pjg ) {
-		sprintf( statusmessage, "Compressing data to PJG" );
-	}
-	else if ( function == &packJPG::unpack_pjg ) {
-		sprintf( statusmessage, "Uncompressing data from PJG" );
-	}
-	else if ( function == &packJPG::swap_streams ) {
-		sprintf( statusmessage, "Swapping input/output streams" );
-	}
-	else if ( function == &packJPG::compare_output ) {
-		sprintf( statusmessage, "Verifying output stream" );
-	}
-	else if ( function == &packJPG::reset_buffers ) {
-		sprintf( statusmessage, "Resetting program" );
+		return "unknown action";
+	} else if ( function == &packJPG::check_file ) {
+		return "Determining filetype";
+	} else if ( function == &packJPG::read_jpeg ) {
+		return "Reading header & image data";
+	} else if ( function == &packJPG::merge_jpeg ) {
+		return "Merging header & image data";
+	} else if ( function == &packJPG::decode_jpeg ) {
+		return "Decompressing JPEG image data";
+	} else if ( function == &packJPG::recode_jpeg ) {
+		return "Recompressing JPEG image data";
+	} else if ( function == &packJPG::adapt_icos ) {
+		return "Adapting DCT precalc. tables";
+	} else if ( function == &packJPG::predict_dc ) {
+		return "Applying prediction to DC";
+	} else if ( function == &packJPG::unpredict_dc ) {
+		return "Removing prediction from DC";
+	} else if ( function == &packJPG::check_value_range ) {
+		return "Checking values range";
+	} else if ( function == &packJPG::calc_zdst_lists ) {
+		return "Calculating zero dist lists";
+	} else if ( function == &packJPG::pack_pjg ) {
+		return "Compressing data to PJG";
+	} else if ( function == &packJPG::unpack_pjg ) {
+		return "Uncompressing data from PJG";
+	} else if ( function == &packJPG::swap_streams ) {
+		return "Swapping input/output streams";
+	} else if ( function == &packJPG::compare_output ) {
+		return "Verifying output stream";
+	} else if ( function == &packJPG::reset_buffers ) {
+		return "Resetting program";
 	}
 	#if defined(DEV_BUILD)
 	else if ( function == &packJPG::dump_hdr ) {
-		sprintf( statusmessage, "Writing header data to file" );
-	}
-	else if ( function == &packJPG::dump_huf ) {
-		sprintf( statusmessage, "Writing huffman data to file" );
-	}
-	else if ( function == &packJPG::dump_coll ) {
-		sprintf( statusmessage, "Writing collections to files" );
-	}
-	else if ( function == &packJPG::dump_zdst ) {
-		sprintf( statusmessage, "Writing zdist lists to files" );
-	}
-	else if ( function == &packJPG::dump_errfile ) {
-		sprintf( statusmessage, "Writing error info to file" );
-	}
-	else if ( function == &packJPG::dump_info ) {
-		sprintf( statusmessage, "Writing info to files" );
-	}
-	else if ( function == &packJPG::dump_dist ) {
-		sprintf( statusmessage, "Writing distributions to files" );
-	}
-	else if ( function == &packJPG::dump_pgm ) {
-		sprintf( statusmessage, "Writing converted image to pgm" );
+		return "Writing header data to file";
+	} else if ( function == &packJPG::dump_huf ) {
+		return "Writing huffman data to file";
+	} else if ( function == &packJPG::dump_coll ) {
+		return "Writing collections to files";
+	} else if ( function == &packJPG::dump_zdst ) {
+		return "Writing zdist lists to files";
+	} else if ( function == &packJPG::dump_errfile ) {
+		return "Writing error info to file";
+	} else if ( function == &packJPG::dump_info ) {
+		return "Writing info to files";
+	} else if ( function == &packJPG::dump_dist ) {
+		return "Writing distributions to files";
+	} else if ( function == &packJPG::dump_pgm ) {
+		return "Writing converted image to pgm";
 	}
 	#endif
 	else {
-		sprintf( statusmessage, "Function description missing!" );
+		return "Function description missing!";
 	}
 }
 #endif
@@ -1860,7 +1649,7 @@ void packJPG::get_status( bool (packJPG::*function)() )
 	----------------------------------------------- */
 	
 #if !defined(BUILD_LIB)
-void packJPG::show_help( void )
+INTERN void packJPG::show_help( void )
 {	
 	fprintf( msgout, "\n" );
 	fprintf( msgout, "Website: %s\n", website );
@@ -1900,6 +1689,228 @@ void packJPG::show_help( void )
 }
 #endif
 
+
+/* -----------------------------------------------
+	processes one file
+	----------------------------------------------- */
+
+INTERN void packJPG::process_file( void )
+{	
+	if ( filetype == F_JPG ) {
+		switch ( action ) {
+			case A_COMPRESS:
+				execute( &packJPG::read_jpeg );
+				execute( &packJPG::decode_jpeg );
+				execute( &packJPG::check_value_range );
+				execute( &packJPG::adapt_icos );
+				execute( &packJPG::predict_dc );
+				execute( &packJPG::calc_zdst_lists );
+				execute( &packJPG::pack_pjg );
+				#if !defined(BUILD_LIB)	
+				if ( verify_lv > 0 ) { // verifcation
+					execute( &packJPG::reset_buffers );
+					execute( &packJPG::swap_streams );
+					execute( &packJPG::unpack_pjg );
+					execute( &packJPG::adapt_icos );
+					execute( &packJPG::unpredict_dc );
+					execute( &packJPG::recode_jpeg );
+					execute( &packJPG::merge_jpeg );
+					execute( &packJPG::compare_output );
+				}
+				#endif
+				break;
+				
+			#if !defined(BUILD_LIB) && defined(DEV_BUILD)
+			case A_SPLIT_DUMP:
+				execute( &packJPG::read_jpeg );
+				execute( &packJPG::dump_hdr );
+				execute( &packJPG::dump_huf );
+				break;
+				
+			case A_COLL_DUMP:
+				execute( &packJPG::read_jpeg );
+				execute( &packJPG::decode_jpeg );
+				execute( &packJPG::dump_coll );
+				break;
+				
+			case A_FCOLL_DUMP:
+				execute( &packJPG::read_jpeg );
+				execute( &packJPG::decode_jpeg );
+				execute( &packJPG::check_value_range );
+				execute( &packJPG::adapt_icos );
+				execute( &packJPG::predict_dc );
+				execute( &packJPG::dump_coll );
+				break;
+				
+			case A_ZDST_DUMP:
+				execute( &packJPG::read_jpeg );
+				execute( &packJPG::decode_jpeg );
+				execute( &packJPG::check_value_range );
+				execute( &packJPG::adapt_icos );
+				execute( &packJPG::predict_dc );
+				execute( &packJPG::calc_zdst_lists );
+				execute( &packJPG::dump_zdst );
+				break;
+				
+			case A_TXT_INFO:
+				execute( &packJPG::read_jpeg );
+				execute( &packJPG::dump_info );
+				break;
+				
+			case A_DIST_INFO:
+				execute( &packJPG::read_jpeg );
+				execute( &packJPG::decode_jpeg );
+				execute( &packJPG::check_value_range );
+				execute( &packJPG::adapt_icos );
+				execute( &packJPG::predict_dc );
+				execute( &packJPG::dump_dist );
+				break;
+			
+			case A_PGM_DUMP:
+				execute( &packJPG::read_jpeg );
+				execute( &packJPG::decode_jpeg );
+				execute( &packJPG::adapt_icos );
+				execute( &packJPG::dump_pgm );
+				break;
+			#else
+			default:
+				break;
+			#endif
+		}
+	}
+	else if ( filetype == F_PJG )	{
+		switch ( action )
+		{
+			case A_COMPRESS:
+				execute( &packJPG::unpack_pjg );
+				execute( &packJPG::adapt_icos );
+				execute( &packJPG::unpredict_dc );
+				execute( &packJPG::recode_jpeg );
+				execute( &packJPG::merge_jpeg );
+				#if !defined(BUILD_LIB)
+				if ( verify_lv > 0 ) { // verify
+					execute( &packJPG::reset_buffers );
+					execute( &packJPG::swap_streams );
+					execute( &packJPG::read_jpeg );
+					execute( &packJPG::decode_jpeg );
+					execute( &packJPG::check_value_range );
+					execute( &packJPG::adapt_icos );
+					execute( &packJPG::predict_dc );
+					execute( &packJPG::calc_zdst_lists );
+					execute( &packJPG::pack_pjg );
+					execute( &packJPG::compare_output );
+				}
+				#endif
+				break;
+				
+			#if !defined(BUILD_LIB) && defined(DEV_BUILD)
+			case A_SPLIT_DUMP:
+				execute( &packJPG::unpack_pjg );
+				execute( &packJPG::adapt_icos );
+				execute( &packJPG::unpredict_dc );
+				execute( &packJPG::recode_jpeg );
+				execute( &packJPG::dump_hdr );
+				execute( &packJPG::dump_huf );
+				break;
+				
+			case A_COLL_DUMP:
+				execute( &packJPG::unpack_pjg );
+				execute( &packJPG::adapt_icos );			
+				execute( &packJPG::unpredict_dc );
+				execute( &packJPG::dump_coll );
+				break;
+				
+			case A_FCOLL_DUMP:				
+				execute( &packJPG::unpack_pjg );
+				execute( &packJPG::dump_coll );
+				break;
+				
+			case A_ZDST_DUMP:
+				execute( &packJPG::unpack_pjg );
+				execute( &packJPG::dump_zdst );
+				break;
+			
+			case A_TXT_INFO:
+				execute( &packJPG::unpack_pjg );
+				execute( &packJPG::dump_info );
+				break;
+			
+			case A_DIST_INFO:
+				execute( &packJPG::unpack_pjg );
+				execute( &packJPG::dump_dist );
+				break;
+			
+			case A_PGM_DUMP:
+				execute( &packJPG::unpack_pjg );
+				execute( &packJPG::adapt_icos );
+				execute( &packJPG::unpredict_dc );
+				execute( &packJPG::dump_pgm );
+				break;
+			#else
+			default:
+				break;
+			#endif
+		}
+	}	
+	#if !defined(BUILD_LIB) && defined(DEV_BUILD)
+	// write error file if verify lv > 1
+	if ( ( verify_lv > 1 ) && ( errorlevel >= err_tol ) )
+		dump_errfile();
+	#endif
+	// reset buffers
+	reset_buffers();
+}
+
+
+/* -----------------------------------------------
+	main-function execution routine
+	----------------------------------------------- */
+
+INTERN void packJPG::execute( bool (packJPG::*function)() )
+{
+	if ( errorlevel < err_tol ) {
+		#if !defined BUILD_LIB
+		clock_t begin, end;
+		bool success;
+		int total;
+		
+		// write statusmessage
+		if ( verbosity == 2 ) {
+			fprintf( msgout,  "\n%s ", get_status( function ) );
+			for ( int i = strlen( get_status( function ) ); i <= 30; i++ )
+				fprintf( msgout,  " " );			
+		}
+		
+		// set starttime
+		begin = clock();
+		// call function
+		success = ( this->*function )();
+		// set endtime
+		end = clock();
+		
+		if ( ( errorlevel > 0 ) && ( errorfunction == NULL ) )
+			errorfunction = function;
+		
+		// write time or failure notice
+		if ( success ) {
+			total = (int) ( (double) (( end - begin ) * 1000) / CLOCKS_PER_SEC );
+			if ( verbosity == 2 ) fprintf( msgout,  "%6ims", ( total >= 0 ) ? total : -1 );
+		}
+		else {
+			errorfunction = function;
+			if ( verbosity == 2 ) fprintf( msgout,  "%8s", "ERROR" );
+		}
+		#else
+		// call function
+		( this->*function )();
+		
+		// store errorfunction if needed
+		if ( ( errorlevel > 0 ) && ( errorfunction == NULL ) )
+			errorfunction = function;
+		#endif
+	}
+}
+
 /* ----------------------- End of main interface functions -------------------------- */
 
 /* ----------------------- Begin of main functions -------------------------- */
@@ -1910,7 +1921,7 @@ void packJPG::show_help( void )
 	----------------------------------------------- */
 
 #if !defined(BUILD_LIB)
-bool packJPG::check_file( void )
+INTERN bool packJPG::check_file( void )
 {	
 	unsigned char fileid[ 2 ] = { 0, 0 };
 	const char* filename = filelist[ file_no ];
@@ -1927,31 +1938,19 @@ bool packJPG::check_file( void )
 	// free memory from filenames if needed
 	if ( jpgfilename != NULL ) free( jpgfilename ); jpgfilename = NULL;
 	if ( pjgfilename != NULL ) free( pjgfilename ); pjgfilename = NULL;
-	if ( tmpfilename != NULL ) free( tmpfilename ); tmpfilename = NULL;
-	if ( basfilename != NULL ) free( basfilename ); basfilename = NULL;
 	
 	// immediately return error if 2 bytes can't be read
 	if ( str_in->read( fileid, 1, 2 ) != 2 ) { 
-		filetype = UNK;
+		filetype = F_UNK;
 		sprintf( errormessage, "file doesn't contain enough data" );
 		errorlevel = 2;
 		return false;
 	}
 	
-	// set temp filename & base filename
-	if ( !pipe_on ) {
-		tmpfilename = unique_filename( filename, "tmp" );
-		basfilename = create_filename( filename, "bin" );
-	}
-	else {
-		tmpfilename = unique_filename( "TMPFILE", NULL );
-		basfilename = create_filename( "BINFILE", NULL );
-	}
-	
 	// check file id, determine filetype
 	if ( ( fileid[0] == 0xFF ) && ( fileid[1] == 0xD8 ) ) {
 		// file is JPEG
-		filetype = JPEG;
+		filetype = F_JPG;
 		// create filenames
 		if ( !pipe_on ) {
 			jpgfilename = (char*) calloc( strlen( filename ) + 1, sizeof( char ) );
@@ -1986,9 +1985,9 @@ bool packJPG::check_file( void )
 			auto_set = false;
 		}
 	}
-	else if ( ( fileid[0] == pjg_header[0] ) && ( fileid[1] == pjg_header[1] ) ) {
+	else if ( ( fileid[0] == pjg_magic[0] ) && ( fileid[1] == pjg_magic[1] ) ) {
 		// file is PJG
-		filetype = PJG;
+		filetype = F_PJG;
 		// create filenames
 		if ( !pipe_on ) {
 			pjgfilename = (char*) calloc( strlen( filename ) + 1, sizeof( char ) );
@@ -2013,7 +2012,7 @@ bool packJPG::check_file( void )
 	}
 	else {
 		// file is neither
-		filetype = UNK;
+		filetype = F_UNK;
 		sprintf( errormessage, "filetype of file \"%s\" is unknown", filename );
 		errorlevel = 2;
 		return false;		
@@ -2026,10 +2025,210 @@ bool packJPG::check_file( void )
 
 
 /* -----------------------------------------------
+	swap streams / init verification
+	----------------------------------------------- */
+	
+#if !defined(BUILD_LIB)
+INTERN bool packJPG::swap_streams( void )	
+{
+	char dmp[ 2 ];
+	
+	// store input stream
+	str_str = str_in;
+	str_str->rewind();
+	
+	// replace input stream by output stream / switch mode for reading / read first bytes
+	str_in = str_out;
+	str_in->switch_mode();
+	str_in->read( dmp, 1, 2 );
+	
+	// open new stream for output / check for errors
+	str_out = new iostream( NULL, 1, 0, 1 );
+	if ( str_out->chkerr() ) {
+		sprintf( errormessage, "error opening comparison stream" );
+		errorlevel = 2;
+		return false;
+	}
+	
+	
+	return true;
+}
+#endif
+
+
+/* -----------------------------------------------
+	comparison between input & output
+	----------------------------------------------- */
+
+#if !defined(BUILD_LIB)
+INTERN bool packJPG::compare_output( void )
+{
+	unsigned char* buff_ori;
+	unsigned char* buff_cmp;
+	int bsize = 1024;
+	int dsize;
+	int i, b;
+	
+	
+	// init buffer arrays
+	buff_ori = ( unsigned char* ) calloc( bsize, sizeof( char ) );
+	buff_cmp = ( unsigned char* ) calloc( bsize, sizeof( char ) );
+	if ( ( buff_ori == NULL ) || ( buff_cmp == NULL ) ) {
+		sprintf( errormessage, MEM_ERRMSG );
+		errorlevel = 2;
+		return false;
+	}
+	
+	// switch output stream mode / check for stream errors
+	str_out->switch_mode();
+	while ( true ) {
+		if ( str_out->chkerr() )
+			sprintf( errormessage, "error in comparison stream" );
+		else if ( str_in->chkerr() )
+			sprintf( errormessage, "error in output stream" );
+		else if ( str_str->chkerr() )
+			sprintf( errormessage, "error in input stream" );
+		else break;
+		errorlevel = 2;
+		return false;
+	}
+	
+	// compare sizes
+	dsize = str_str->getsize();
+	if ( str_out->getsize() != dsize ) {
+		sprintf( errormessage, "file sizes do not match" );
+		errorlevel = 2;
+		return false;
+	}
+	
+	// compare files byte by byte
+	for ( i = 0; i < dsize; i++ ) {
+		b = i % bsize;
+		if ( b == 0 ) {
+			str_str->read( buff_ori, sizeof( char ), bsize );
+			str_out->read( buff_cmp, sizeof( char ), bsize );
+		}
+		if ( buff_ori[ b ] != buff_cmp[ b ] ) {
+			sprintf( errormessage, "difference found at 0x%X", i );
+			errorlevel = 2;
+			return false;
+		}
+	}
+	
+	// free buffers
+	free( buff_ori );
+	free( buff_cmp );
+	
+	
+	return true;
+}
+#endif
+
+
+/* -----------------------------------------------
+	set each variable to its initial value
+	----------------------------------------------- */
+
+INTERN bool packJPG::reset_buffers( void )
+{
+	int cmp, bpos;
+	int i;
+	
+	
+	// -- free buffers --
+	
+	// free buffers & set pointers NULL
+	if ( hdrdata  != NULL ) free ( hdrdata );
+	if ( huffdata != NULL ) free ( huffdata );
+	if ( grbgdata != NULL ) free ( grbgdata );
+	if ( rst_err  != NULL ) free ( rst_err );
+	if ( rstp     != NULL ) free ( rstp );
+	if ( scnp     != NULL ) free ( scnp );
+	hdrdata   = NULL;
+	huffdata  = NULL;
+	grbgdata  = NULL;
+	rst_err   = NULL;
+	rstp      = NULL;
+	scnp      = NULL;
+	
+	// free image arrays
+	for ( cmp = 0; cmp < 4; cmp++ )	{
+		if ( zdstdata[ cmp ] != NULL ) free( zdstdata[cmp] );
+		if ( eobxhigh[ cmp ] != NULL ) free( eobxhigh[cmp] );
+		if ( eobyhigh[ cmp ] != NULL ) free( eobyhigh[cmp] );
+		if ( zdstxlow[ cmp ] != NULL ) free( zdstxlow[cmp] );
+		if ( zdstylow[ cmp ] != NULL ) free( zdstylow[cmp] );
+		zdstdata[ cmp ] = NULL;
+		eobxhigh[ cmp ] = NULL;
+		eobyhigh[ cmp ] = NULL;
+		zdstxlow[ cmp ] = NULL;
+		zdstylow[ cmp ] = NULL;
+		freqscan[ cmp ] = (unsigned char*) stdscan;
+		
+		for ( bpos = 0; bpos < 64; bpos++ ) {
+			if ( colldata[ cmp ][ bpos ] != NULL ) free( colldata[cmp][bpos] );
+			colldata[ cmp ][ bpos ] = NULL;
+		}		
+	}
+	
+	
+	// -- set variables --
+	
+	// preset componentinfo
+	for ( cmp = 0; cmp < 4; cmp++ ) {
+		cmpnfo[ cmp ].sfv = -1;
+		cmpnfo[ cmp ].sfh = -1;
+		cmpnfo[ cmp ].mbs = -1;
+		cmpnfo[ cmp ].bcv = -1;
+		cmpnfo[ cmp ].bch = -1;
+		cmpnfo[ cmp ].bc  = -1;
+		cmpnfo[ cmp ].ncv = -1;
+		cmpnfo[ cmp ].nch = -1;
+		cmpnfo[ cmp ].nc  = -1;
+		cmpnfo[ cmp ].sid = -1;
+		cmpnfo[ cmp ].jid = -1;
+		cmpnfo[ cmp ].qtable = NULL;
+		cmpnfo[ cmp ].huffdc = -1;
+		cmpnfo[ cmp ].huffac = -1;
+	}
+	
+	// preset imgwidth / imgheight / component count 
+	imgwidth  = 0;
+	imgheight = 0;
+	cmpc      = 0;
+	
+	// preset mcu info variables / restart interval
+	sfhm      = 0;
+	sfvm      = 0;
+	mcuc      = 0;
+	mcuh      = 0;
+	mcuv      = 0;
+	rsti      = 0;
+	
+	// reset quantization / huffman tables
+	for ( i = 0; i < 4; i++ ) {
+		htset[ 0 ][ i ] = 0;
+		htset[ 1 ][ i ] = 0;
+		for ( bpos = 0; bpos < 64; bpos++ )
+			qtables[ i ][ bpos ] = 0;
+	}
+	
+	// preset jpegtype
+	jpegtype  = 0;
+	
+	// reset padbit
+	padbit = -1;
+	
+	
+	return true;
+}
+
+
+/* -----------------------------------------------
 	Read in header & image data
 	----------------------------------------------- */
 	
-bool packJPG::read_jpeg( void )
+INTERN bool packJPG::read_jpeg( void )
 {
 	unsigned char* segment = NULL; // storage for current segment
 	unsigned int   ssize = 1024; // current size of segment array
@@ -2099,7 +2298,7 @@ bool packJPG::read_jpeg( void )
 						crst++;
 					}
 					else { // in all other cases leave it to the header parser routines
-						// store number of falsely set rst markers
+						// store number of wrongly set rst markers
 						if ( crst > 0 ) {
 							if ( rst_err == NULL ) {
 								rst_err = (unsigned char*) calloc( scnc + 1, sizeof( char ) );
@@ -2245,7 +2444,7 @@ bool packJPG::read_jpeg( void )
 	Merges header & image data to jpeg
 	----------------------------------------------- */
 	
-bool packJPG::merge_jpeg( void )
+INTERN bool packJPG::merge_jpeg( void )
 {
 	unsigned char SOI[ 2 ] = { 0xFF, 0xD8 }; // SOI segment
 	unsigned char EOI[ 2 ] = { 0xFF, 0xD9 }; // EOI segment
@@ -2347,7 +2546,7 @@ bool packJPG::merge_jpeg( void )
 	JPEG decoding routine
 	----------------------------------------------- */
 
-bool packJPG::decode_jpeg( void )
+INTERN bool packJPG::decode_jpeg( void )
 {
 	abitreader* huffr; // bitwise reader for image data
 	
@@ -2421,6 +2620,7 @@ bool packJPG::decode_jpeg( void )
 			lastdc[ 3 ] = 0;
 			
 			// (re)set status
+			eob = 0;
 			sta = 0;
 			
 			// (re)set eobrun
@@ -2559,23 +2759,28 @@ bool packJPG::decode_jpeg( void )
 						// ---> progressive non interleaved AC decoding <---
 						// ---> succesive approximation first stage <---
 						while ( sta == 0 ) {
-							// decode block
-							eob = jpg_decode_ac_prg_fs( huffr,
-								&(htrees[ 1 ][ cmpnfo[cmp].huffac ]),
-								block, &eobrun, cs_from, cs_to );
+							if ( eobrun == 0 ) {
+								// decode block
+								eob = jpg_decode_ac_prg_fs( huffr,
+									&(htrees[ 1 ][ cmpnfo[cmp].huffac ]),
+									block, &eobrun, cs_from, cs_to );
+								
+								if ( eobrun > 0 ) {
+									// check for non optimal coding
+									if ( ( eob == cs_from )  && ( peobrun > 0 ) &&
+										( peobrun <	hcodes[ 1 ][ cmpnfo[cmp].huffac ].max_eobrun - 1 ) ) {
+										sprintf( errormessage,
+											"reconstruction of non optimal coding not supported" );
+										errorlevel = 1;
+									}
+									peobrun = eobrun;
+									eobrun--;
+								} else peobrun = 0;
 							
-							// check for non optimal coding
-							if ( ( eob == cs_from ) && ( eobrun > 0 ) &&
-								( peobrun > 0 ) && ( peobrun <
-								hcodes[ 1 ][ cmpnfo[cmp].huffac ].max_eobrun - 1 ) ) {
-								sprintf( errormessage,
-									"reconstruction of non optimal coding not supported" );
-								errorlevel = 1;
-							}
-							
-							// copy to colldata
-							for ( bpos = cs_from; bpos < eob; bpos++ )
-								colldata[ cmp ][ bpos ][ dpos ] = block[ bpos ] << cs_sal;
+								// copy to colldata
+								for ( bpos = cs_from; bpos < eob; bpos++ )
+									colldata[ cmp ][ bpos ][ dpos ] = block[ bpos ] << cs_sal;
+							} else eobrun--;
 							
 							// check for errors
 							if ( eob < 0 ) sta = -1;
@@ -2600,22 +2805,25 @@ bool packJPG::decode_jpeg( void )
 									&(htrees[ 1 ][ cmpnfo[cmp].huffac ]),
 									block, &eobrun, cs_from, cs_to );
 								
-								// check for non optimal coding
-								if ( ( eob == cs_from ) && ( eobrun > 0 ) &&
-									( peobrun > 0 ) && ( peobrun <
-									hcodes[ 1 ][ cmpnfo[cmp].huffac ].max_eobrun - 1 ) ) {
-									sprintf( errormessage,
-										"reconstruction of non optimal coding not supported" );
-									errorlevel = 1;
-								}
-								
-								// store eobrun
-								peobrun = eobrun;
+								if ( eobrun > 0 ) {
+									// check for non optimal coding
+									if ( ( eob == cs_from ) && ( peobrun > 0 ) &&
+										( peobrun < hcodes[ 1 ][ cmpnfo[cmp].huffac ].max_eobrun - 1 ) ) {
+										sprintf( errormessage,
+											"reconstruction of non optimal coding not supported" );
+										errorlevel = 1;
+									}
+									
+									// store eobrun
+									peobrun = eobrun;
+									eobrun--;
+								} else peobrun = 0;
 							}
 							else {
 								// decode block (short routine)
 								eob = jpg_decode_eobrun_sa( huffr,
 									block, &eobrun, cs_from, cs_to );
+								eobrun--;
 							}
 								
 							// copy back to colldata
@@ -2658,12 +2866,18 @@ bool packJPG::decode_jpeg( void )
 		}
 	}
 	
-	// check for unneeded data
-	if ( !huffr->eof ) {
-		sprintf( errormessage, "unneeded data found after coded image data" );
+	// check for missing data
+	if ( huffr->peof ) {
+		sprintf( errormessage, "coded image data truncated / too short" );
 		errorlevel = 1;
 	}
-			
+	
+	// check for surplus data
+	if ( !huffr->eof ) {
+		sprintf( errormessage, "surplus data found after coded image data" );
+		errorlevel = 1;
+	}
+	
 	// clean up
 	delete( huffr );
 	
@@ -2676,7 +2890,7 @@ bool packJPG::decode_jpeg( void )
 	JPEG encoding routine
 	----------------------------------------------- */
 
-bool packJPG::recode_jpeg( void )
+INTERN bool packJPG::recode_jpeg( void )
 {
 	abitwriter*  huffw; // bitwise writer for image data
 	abytewriter* storw; // bytewise writer for storage of correction bits
@@ -3008,7 +3222,7 @@ bool packJPG::recode_jpeg( void )
 	adapt ICOS tables for quantizer tables
 	----------------------------------------------- */
 	
-bool packJPG::adapt_icos( void )
+INTERN bool packJPG::adapt_icos( void )
 {
 	unsigned short quant[ 64 ]; // local copy of quantization
 	int ipos;
@@ -3042,7 +3256,7 @@ bool packJPG::adapt_icos( void )
 	filter DC coefficients
 	----------------------------------------------- */
 
-bool packJPG::predict_dc( void )
+INTERN bool packJPG::predict_dc( void )
 {
 	signed short* coef;
 	int absmaxp;
@@ -3079,7 +3293,7 @@ bool packJPG::predict_dc( void )
 	unpredict DC coefficients
 	----------------------------------------------- */
 
-bool packJPG::unpredict_dc( void )
+INTERN bool packJPG::unpredict_dc( void )
 {	
 	signed short* coef;
 	int absmaxp;
@@ -3117,7 +3331,7 @@ bool packJPG::unpredict_dc( void )
 	checks range of values, error if out of bounds
 	----------------------------------------------- */
 
-bool packJPG::check_value_range( void )
+INTERN bool packJPG::check_value_range( void )
 {
 	int absmax;
 	int cmp, bpos, dpos;
@@ -3146,7 +3360,7 @@ bool packJPG::check_value_range( void )
 	calculate zero distribution lists
 	----------------------------------------------- */
 	
-bool packJPG::calc_zdst_lists( void )
+INTERN bool packJPG::calc_zdst_lists( void )
 {
 	int cmp, bpos, dpos;
 	int b_x, b_y;
@@ -3186,7 +3400,7 @@ bool packJPG::calc_zdst_lists( void )
 	packs all parts to compressed pjg
 	----------------------------------------------- */
 	
-bool packJPG::pack_pjg( void )
+INTERN bool packJPG::pack_pjg( void )
 {
 	aricoder* encoder;
 	unsigned char hcode;
@@ -3197,7 +3411,7 @@ bool packJPG::pack_pjg( void )
 	
 	
 	// PJG-Header
-	str_out->write( (void*) pjg_header, 1, 2 );
+	str_out->write( (void*) pjg_magic, 1, 2 );
 	
 	// store settings if not auto
 	if ( !auto_set ) {
@@ -3208,7 +3422,7 @@ bool packJPG::pack_pjg( void )
 	}
 	
 	// store version number
-	hcode = pjgversion;
+	hcode = appversion;
 	str_out->write( &hcode, 1, 1 );
 	
 	
@@ -3314,7 +3528,7 @@ bool packJPG::pack_pjg( void )
 	unpacks compressed pjg to colldata
 	----------------------------------------------- */
 	
-bool packJPG::unpack_pjg( void )
+INTERN bool packJPG::unpack_pjg( void )
 {
 	aricoder* decoder;
 	unsigned char hcode;
@@ -3333,7 +3547,7 @@ bool packJPG::unpack_pjg( void )
 		}
 		else if ( hcode >= 0x14 ) {
 			// compare version number
-			if ( hcode != pjgversion ) {
+			if ( hcode != appversion ) {
 				sprintf( errormessage, "incompatible file, use %s v%i.%i",
 					appname, hcode / 10, hcode % 10 );
 				errorlevel = 2;
@@ -3404,206 +3618,6 @@ bool packJPG::unpack_pjg( void )
 	return true;
 }
 
-
-/* -----------------------------------------------
-	swap streams / init verification
-	----------------------------------------------- */
-	
-#if !defined(BUILD_LIB)
-bool packJPG::swap_streams( void )	
-{
-	char dmp[ 2 ];
-	
-	// store input stream
-	str_str = str_in;
-	str_str->rewind();
-	
-	// replace input stream by output stream / switch mode for reading / read first bytes
-	str_in = str_out;
-	str_in->switch_mode();
-	str_in->read( dmp, 1, 2 );
-	
-	// open new stream for output / check for errors
-	str_out = new iostream( (void*) tmpfilename, 0, 0, 1 );
-	if ( str_out->chkerr() ) {
-		sprintf( errormessage, "error opening comparison stream" );
-		errorlevel = 2;
-		return false;
-	}
-	
-	
-	return true;
-}
-#endif
-
-
-/* -----------------------------------------------
-	comparison between input & output
-	----------------------------------------------- */
-
-#if !defined(BUILD_LIB)
-bool packJPG::compare_output( void )
-{
-	unsigned char* buff_ori;
-	unsigned char* buff_cmp;
-	int bsize = 1024;
-	int dsize;
-	int i, b;
-	
-	
-	// init buffer arrays
-	buff_ori = ( unsigned char* ) calloc( bsize, sizeof( char ) );
-	buff_cmp = ( unsigned char* ) calloc( bsize, sizeof( char ) );
-	if ( ( buff_ori == NULL ) || ( buff_cmp == NULL ) ) {
-		sprintf( errormessage, MEM_ERRMSG );
-		errorlevel = 2;
-		return false;
-	}
-	
-	// switch output stream mode / check for stream errors
-	str_out->switch_mode();
-	while ( true ) {
-		if ( str_out->chkerr() )
-			sprintf( errormessage, "error in comparison stream" );
-		else if ( str_in->chkerr() )
-			sprintf( errormessage, "error in output stream" );
-		else if ( str_str->chkerr() )
-			sprintf( errormessage, "error in input stream" );
-		else break;
-		errorlevel = 2;
-		return false;
-	}
-	
-	// compare sizes
-	dsize = str_str->getsize();
-	if ( str_out->getsize() != dsize ) {
-		sprintf( errormessage, "file sizes do not match" );
-		errorlevel = 2;
-		return false;
-	}
-	
-	// compare files byte by byte
-	for ( i = 0; i < dsize; i++ ) {
-		b = i % bsize;
-		if ( b == 0 ) {
-			str_str->read( buff_ori, sizeof( char ), bsize );
-			str_out->read( buff_cmp, sizeof( char ), bsize );
-		}
-		if ( buff_ori[ b ] != buff_cmp[ b ] ) {
-			sprintf( errormessage, "difference found at 0x%X", i );
-			errorlevel = 2;
-			return false;
-		}
-	}
-	
-	// free buffers
-	free( buff_ori );
-	free( buff_cmp );
-	
-	
-	return true;
-}
-#endif
-
-
-/* -----------------------------------------------
-	set each variable to its initial value
-	----------------------------------------------- */
-
-bool packJPG::reset_buffers( void )
-{
-	int cmp, bpos;
-	int i;
-	
-	
-	// -- free buffers --
-	
-	// free buffers & set pointers NULL
-	if ( hdrdata  != NULL ) free ( hdrdata );
-	if ( huffdata != NULL ) free ( huffdata );
-	if ( grbgdata != NULL ) free ( grbgdata );
-	if ( rst_err  != NULL ) free ( rst_err );
-	if ( rstp     != NULL ) free ( rstp );
-	if ( scnp     != NULL ) free ( scnp );
-	hdrdata   = NULL;
-	huffdata  = NULL;
-	grbgdata  = NULL;
-	rst_err   = NULL;
-	rstp      = NULL;
-	scnp      = NULL;
-	
-	// free image arrays
-	for ( cmp = 0; cmp < 4; cmp++ )	{
-		if ( zdstdata[ cmp ] != NULL ) free( zdstdata[cmp] );
-		if ( eobxhigh[ cmp ] != NULL ) free( eobxhigh[cmp] );
-		if ( eobyhigh[ cmp ] != NULL ) free( eobyhigh[cmp] );
-		if ( zdstxlow[ cmp ] != NULL ) free( zdstxlow[cmp] );
-		if ( zdstylow[ cmp ] != NULL ) free( zdstylow[cmp] );
-		zdstdata[ cmp ] = NULL;
-		eobxhigh[ cmp ] = NULL;
-		eobyhigh[ cmp ] = NULL;
-		zdstxlow[ cmp ] = NULL;
-		zdstylow[ cmp ] = NULL;
-		freqscan[ cmp ] = (unsigned char*) stdscan;
-		
-		for ( bpos = 0; bpos < 64; bpos++ ) {
-			if ( colldata[ cmp ][ bpos ] != NULL ) free( colldata[cmp][bpos] );
-			colldata[ cmp ][ bpos ] = NULL;
-		}		
-	}
-	
-	
-	// -- set variables --
-	
-	// preset componentinfo
-	for ( cmp = 0; cmp < 4; cmp++ ) {
-		cmpnfo[ cmp ].sfv = -1;
-		cmpnfo[ cmp ].sfh = -1;
-		cmpnfo[ cmp ].mbs = -1;
-		cmpnfo[ cmp ].bcv = -1;
-		cmpnfo[ cmp ].bch = -1;
-		cmpnfo[ cmp ].bc  = -1;
-		cmpnfo[ cmp ].ncv = -1;
-		cmpnfo[ cmp ].nch = -1;
-		cmpnfo[ cmp ].nc  = -1;
-		cmpnfo[ cmp ].sid = -1;
-		cmpnfo[ cmp ].jid = -1;
-		cmpnfo[ cmp ].qtable = NULL;
-		cmpnfo[ cmp ].huffdc = -1;
-		cmpnfo[ cmp ].huffac = -1;
-	}
-	
-	// preset imgwidth / imgheight / component count 
-	imgwidth  = 0;
-	imgheight = 0;
-	cmpc      = 0;
-	
-	// preset mcu info variables / restart interval
-	sfhm      = 0;
-	sfvm      = 0;
-	mcuc      = 0;
-	mcuh      = 0;
-	mcuv      = 0;
-	rsti      = 0;
-	
-	// reset quantization / huffman tables
-	for ( i = 0; i < 4; i++ ) {
-		htset[ 0 ][ i ] = 0;
-		htset[ 1 ][ i ] = 0;
-		for ( bpos = 0; bpos < 64; bpos++ )
-			qtables[ i ][ bpos ] = 0;
-	}
-	
-	// preset jpegtype
-	jpegtype  = 0;
-	
-	// reset padbit
-	padbit = -1;
-	
-	
-	return true;
-}
-
 /* ----------------------- End of main functions -------------------------- */
 
 /* ----------------------- Begin of JPEG specific functions -------------------------- */
@@ -3612,7 +3626,7 @@ bool packJPG::reset_buffers( void )
 /* -----------------------------------------------
 	Parses header for imageinfo
 	----------------------------------------------- */
-bool packJPG::jpg_setup_imginfo( void )
+INTERN bool packJPG::jpg_setup_imginfo( void )
 {
 	unsigned char  type = 0x00; // type of current marker segment
 	unsigned int   len  = 0; // length of current marker segment
@@ -3726,7 +3740,7 @@ bool packJPG::jpg_setup_imginfo( void )
 /* -----------------------------------------------
 	Parse routines for JFIF segments
 	----------------------------------------------- */
-bool packJPG::jpg_parse_jfif( unsigned char type, unsigned int len, unsigned char* segment )
+INTERN bool packJPG::jpg_parse_jfif( unsigned char type, unsigned int len, unsigned char* segment )
 {
 	unsigned int hpos = 4; // current position in segment, start after segment header
 	int lval, rval; // temporary variables
@@ -4010,7 +4024,7 @@ bool packJPG::jpg_parse_jfif( unsigned char type, unsigned int len, unsigned cha
 /* -----------------------------------------------
 	JFIF header rebuilding routine
 	----------------------------------------------- */
-bool packJPG::jpg_rebuild_header( void )
+INTERN bool packJPG::jpg_rebuild_header( void )
 {	
 	abytewriter* hdrw; // new header writer
 	
@@ -4049,7 +4063,7 @@ bool packJPG::jpg_rebuild_header( void )
 /* -----------------------------------------------
 	sequential block decoding routine
 	----------------------------------------------- */
-int packJPG::jpg_decode_block_seq( abitreader* huffr, huffTree* dctree, huffTree* actree, short* block )
+INTERN int packJPG::jpg_decode_block_seq( abitreader* huffr, huffTree* dctree, huffTree* actree, short* block )
 {
 	unsigned short n;
 	unsigned char  s;
@@ -4104,7 +4118,7 @@ int packJPG::jpg_decode_block_seq( abitreader* huffr, huffTree* dctree, huffTree
 /* -----------------------------------------------
 	sequential block encoding routine
 	----------------------------------------------- */
-int packJPG::jpg_encode_block_seq( abitwriter* huffw, huffCodes* dctbl, huffCodes* actbl, short* block )
+INTERN int packJPG::jpg_encode_block_seq( abitwriter* huffw, huffCodes* dctbl, huffCodes* actbl, short* block )
 {
 	unsigned short n;
 	unsigned char  s;
@@ -4156,7 +4170,7 @@ int packJPG::jpg_encode_block_seq( abitwriter* huffw, huffCodes* dctbl, huffCode
 /* -----------------------------------------------
 	progressive DC decoding routine
 	----------------------------------------------- */
-int packJPG::jpg_decode_dc_prg_fs( abitreader* huffr, huffTree* dctree, short* block )
+INTERN int packJPG::jpg_decode_dc_prg_fs( abitreader* huffr, huffTree* dctree, short* block )
 {
 	unsigned short n;
 	unsigned char  s;
@@ -4179,7 +4193,7 @@ int packJPG::jpg_decode_dc_prg_fs( abitreader* huffr, huffTree* dctree, short* b
 /* -----------------------------------------------
 	progressive DC encoding routine
 	----------------------------------------------- */
-int packJPG::jpg_encode_dc_prg_fs( abitwriter* huffw, huffCodes* dctbl, short* block )
+INTERN int packJPG::jpg_encode_dc_prg_fs( abitwriter* huffw, huffCodes* dctbl, short* block )
 {
 	unsigned short n;
 	unsigned char  s;
@@ -4200,7 +4214,7 @@ int packJPG::jpg_encode_dc_prg_fs( abitwriter* huffw, huffCodes* dctbl, short* b
 /* -----------------------------------------------
 	progressive AC decoding routine
 	----------------------------------------------- */
-int packJPG::jpg_decode_ac_prg_fs( abitreader* huffr, huffTree* actree, short* block, int* eobrun, int from, int to )
+INTERN int packJPG::jpg_decode_ac_prg_fs( abitreader* huffr, huffTree* actree, short* block, int* eobrun, int from, int to )
 {
 	unsigned short n;
 	unsigned char  s;
@@ -4211,14 +4225,6 @@ int packJPG::jpg_decode_ac_prg_fs( abitreader* huffr, huffTree* actree, short* b
 	int l;
 	int r;
 	
-	
-	// check eobrun
-	if ( (*eobrun) > 0 ) {
-		for ( bpos = from; bpos <= to; )
-			block[ bpos ] = 0;
-		(*eobrun)--;
-		return from;
-	}
 	
 	// decode ac
 	for ( bpos = from; bpos <= to; )
@@ -4248,7 +4254,6 @@ int packJPG::jpg_decode_ac_prg_fs( abitreader* huffr, huffTree* actree, short* b
 			(*eobrun) = E_DEVLI( s, n );			
 			// while( bpos <= to ) // fill remaining block with zeroes
 			//	block[ bpos++ ] = 0;
-			(*eobrun)--; // decrement eobrun ( for this one )
 			break;
 		}
 	}
@@ -4262,7 +4267,7 @@ int packJPG::jpg_decode_ac_prg_fs( abitreader* huffr, huffTree* actree, short* b
 /* -----------------------------------------------
 	progressive AC encoding routine
 	----------------------------------------------- */
-int packJPG::jpg_encode_ac_prg_fs( abitwriter* huffw, huffCodes* actbl, short* block, int* eobrun, int from, int to )
+INTERN int packJPG::jpg_encode_ac_prg_fs( abitwriter* huffw, huffCodes* actbl, short* block, int* eobrun, int from, int to )
 {
 	unsigned short n;
 	unsigned char  s;
@@ -4315,7 +4320,7 @@ int packJPG::jpg_encode_ac_prg_fs( abitwriter* huffw, huffCodes* actbl, short* b
 /* -----------------------------------------------
 	progressive DC SA decoding routine
 	----------------------------------------------- */
-int packJPG::jpg_decode_dc_prg_sa( abitreader* huffr, short* block )
+INTERN int packJPG::jpg_decode_dc_prg_sa( abitreader* huffr, short* block )
 {
 	// decode next bit of dc coefficient
 	block[ 0 ] = huffr->read( 1 );
@@ -4328,7 +4333,7 @@ int packJPG::jpg_decode_dc_prg_sa( abitreader* huffr, short* block )
 /* -----------------------------------------------
 	progressive DC SA encoding routine
 	----------------------------------------------- */
-int packJPG::jpg_encode_dc_prg_sa( abitwriter* huffw, short* block )
+INTERN int packJPG::jpg_encode_dc_prg_sa( abitwriter* huffw, short* block )
 {
 	// enocode next bit of dc coefficient
 	huffw->write( block[ 0 ], 1 );
@@ -4341,7 +4346,7 @@ int packJPG::jpg_encode_dc_prg_sa( abitwriter* huffw, short* block )
 /* -----------------------------------------------
 	progressive AC SA decoding routine
 	----------------------------------------------- */
-int packJPG::jpg_decode_ac_prg_sa( abitreader* huffr, huffTree* actree, short* block, int* eobrun, int from, int to )
+INTERN int packJPG::jpg_decode_ac_prg_sa( abitreader* huffr, huffTree* actree, short* block, int* eobrun, int from, int to )
 {
 	unsigned short n;
 	unsigned char  s;
@@ -4355,8 +4360,7 @@ int packJPG::jpg_decode_ac_prg_sa( abitreader* huffr, huffTree* actree, short* b
 	
 	
 	// decode AC succesive approximation bits
-	if ( (*eobrun) == 0 )
-	while ( bpos <= to )
+	if ( (*eobrun) == 0 ) while ( bpos <= to )
 	{
 		// decode next
 		hc = jpg_next_huffcode( huffr, actree );
@@ -4406,8 +4410,6 @@ int packJPG::jpg_decode_ac_prg_sa( abitreader* huffr, huffTree* actree, short* b
 				block[ bpos ] = ( block[ bpos ] > 0 ) ? n : -n;
 			}
 		}
-		// decrement eobrun
-		(*eobrun)--;
 	}
 	
 	// return eob
@@ -4418,7 +4420,7 @@ int packJPG::jpg_decode_ac_prg_sa( abitreader* huffr, huffTree* actree, short* b
 /* -----------------------------------------------
 	progressive AC SA encoding routine
 	----------------------------------------------- */
-int packJPG::jpg_encode_ac_prg_sa( abitwriter* huffw, abytewriter* storw, huffCodes* actbl, short* block, int* eobrun, int from, int to )
+INTERN int packJPG::jpg_encode_ac_prg_sa( abitwriter* huffw, abytewriter* storw, huffCodes* actbl, short* block, int* eobrun, int from, int to )
 {
 	unsigned short n;
 	unsigned char  s;
@@ -4501,7 +4503,7 @@ int packJPG::jpg_encode_ac_prg_sa( abitwriter* huffw, abytewriter* storw, huffCo
 /* -----------------------------------------------
 	run of EOB SA decoding routine
 	----------------------------------------------- */
-int packJPG::jpg_decode_eobrun_sa( abitreader* huffr, short* block, int* eobrun, int from, int to )
+INTERN int packJPG::jpg_decode_eobrun_sa( abitreader* huffr, short* block, int* eobrun, int from, int to )
 {
 	unsigned short n;
 	int bpos;
@@ -4515,9 +4517,6 @@ int packJPG::jpg_decode_eobrun_sa( abitreader* huffr, short* block, int* eobrun,
 		}
 	}
 	
-	// decrement eobrun
-	(*eobrun)--;
-	
 	
 	return 0;
 }
@@ -4526,7 +4525,7 @@ int packJPG::jpg_decode_eobrun_sa( abitreader* huffr, short* block, int* eobrun,
 /* -----------------------------------------------
 	run of EOB encoding routine
 	----------------------------------------------- */
-int packJPG::jpg_encode_eobrun( abitwriter* huffw, huffCodes* actbl, int* eobrun )
+INTERN int packJPG::jpg_encode_eobrun( abitwriter* huffw, huffCodes* actbl, int* eobrun )
 {
 	unsigned short n;
 	unsigned char  s;
@@ -4556,7 +4555,7 @@ int packJPG::jpg_encode_eobrun( abitwriter* huffw, huffCodes* actbl, int* eobrun
 /* -----------------------------------------------
 	correction bits encoding routine
 	----------------------------------------------- */
-int packJPG::jpg_encode_crbits( abitwriter* huffw, abytewriter* storw )
+INTERN int packJPG::jpg_encode_crbits( abitwriter* huffw, abytewriter* storw )
 {	
 	unsigned char* data;
 	int len;
@@ -4583,7 +4582,7 @@ int packJPG::jpg_encode_crbits( abitwriter* huffw, abytewriter* storw )
 /* -----------------------------------------------
 	returns next code (from huffman-tree & -data)
 	----------------------------------------------- */
-int packJPG::jpg_next_huffcode( abitreader *huffw, huffTree *ctree )
+INTERN int packJPG::jpg_next_huffcode( abitreader *huffw, huffTree *ctree )
 {	
 	int node = 0;
 	
@@ -4601,7 +4600,7 @@ int packJPG::jpg_next_huffcode( abitreader *huffw, huffTree *ctree )
 /* -----------------------------------------------
 	calculates next position for MCU
 	----------------------------------------------- */
-int packJPG::jpg_next_mcupos( int* mcu, int* cmp, int* csc, int* sub, int* dpos, int* rstw )
+INTERN int packJPG::jpg_next_mcupos( int* mcu, int* cmp, int* csc, int* sub, int* dpos, int* rstw )
 {
 	int sta = 0; // status
 	
@@ -4646,7 +4645,7 @@ int packJPG::jpg_next_mcupos( int* mcu, int* cmp, int* csc, int* sub, int* dpos,
 /* -----------------------------------------------
 	calculates next position (non interleaved)
 	----------------------------------------------- */
-int packJPG::jpg_next_mcuposn( int* cmp, int* dpos, int* rstw )
+INTERN int packJPG::jpg_next_mcuposn( int* cmp, int* dpos, int* rstw )
 {
 	// increment position
 	(*dpos)++;
@@ -4676,7 +4675,7 @@ int packJPG::jpg_next_mcuposn( int* cmp, int* dpos, int* rstw )
 /* -----------------------------------------------
 	skips the eobrun, calculates next position
 	----------------------------------------------- */
-int packJPG::jpg_skip_eobrun( int* cmp, int* dpos, int* rstw, int* eobrun )
+INTERN int packJPG::jpg_skip_eobrun( int* cmp, int* dpos, int* rstw, int* eobrun )
 {
 	if ( (*eobrun) > 0 ) // error check for eobrun
 	{		
@@ -4721,7 +4720,7 @@ int packJPG::jpg_skip_eobrun( int* cmp, int* dpos, int* rstw, int* eobrun )
 /* -----------------------------------------------
 	creates huffman-codes & -trees from dht-data
 	----------------------------------------------- */
-void packJPG::jpg_build_huffcodes( unsigned char *clen, unsigned char *cval,	huffCodes *hc, huffTree *ht )
+INTERN void packJPG::jpg_build_huffcodes( unsigned char *clen, unsigned char *cval,	huffCodes *hc, huffTree *ht )
 {
 	int nextfree;	
 	int code;
@@ -4802,7 +4801,7 @@ void packJPG::jpg_build_huffcodes( unsigned char *clen, unsigned char *cval,	huf
 /* -----------------------------------------------
 	encodes frequency scanorder to pjg
 	----------------------------------------------- */
-bool packJPG::pjg_encode_zstscan( aricoder* enc, int cmp )
+INTERN bool packJPG::pjg_encode_zstscan( aricoder* enc, int cmp )
 {
 	model_s* model;
 	
@@ -4820,7 +4819,7 @@ bool packJPG::pjg_encode_zstscan( aricoder* enc, int cmp )
 		freqlist[ i ] = stdscan[ i ];
 		
 	// init model
-	model = new model_s( 64, 64, 1 );
+	model = INIT_MODEL_S( 64, 64, 1 );
 	
 	// encode scanorder
 	for ( i = 1; i < 64; i++ )
@@ -4870,7 +4869,7 @@ bool packJPG::pjg_encode_zstscan( aricoder* enc, int cmp )
 /* -----------------------------------------------
 	encodes # of non zeroes to pjg (high)
 	----------------------------------------------- */	
-bool packJPG::pjg_encode_zdst_high( aricoder* enc, int cmp )
+INTERN bool packJPG::pjg_encode_zdst_high( aricoder* enc, int cmp )
 {
 	model_s* model;
 	
@@ -4882,7 +4881,7 @@ bool packJPG::pjg_encode_zdst_high( aricoder* enc, int cmp )
 	
 	
 	// init model, constants
-	model = new model_s( 49 + 1, 25 + 1, 1 );
+	model = INIT_MODEL_S( 49 + 1, 25 + 1, 1 );
 	zdstls = zdstdata[ cmp ];
 	w = cmpnfo[cmp].bch;
 	bc = cmpnfo[cmp].bc;
@@ -4910,7 +4909,7 @@ bool packJPG::pjg_encode_zdst_high( aricoder* enc, int cmp )
 /* -----------------------------------------------
 	encodes # of non zeroes to pjg (low)
 	----------------------------------------------- */	
-bool packJPG::pjg_encode_zdst_low( aricoder* enc, int cmp )
+INTERN bool packJPG::pjg_encode_zdst_low( aricoder* enc, int cmp )
 {
 	model_s* model;
 	
@@ -4925,65 +4924,24 @@ bool packJPG::pjg_encode_zdst_low( aricoder* enc, int cmp )
 	
 	
 	// init model, constants
-	model = new model_s( 8, 8, 2 );
+	model = INIT_MODEL_S( 8, 8, 2 );
 	zdstls_x = zdstxlow[ cmp ];
 	zdstls_y = zdstylow[ cmp ];
 	ctx_eobx = eobxhigh[ cmp ];
 	ctx_eoby = eobyhigh[ cmp ];
 	ctx_zdst = zdstdata[ cmp ];
-	// w = cmpnfo[cmp].bch;
 	bc = cmpnfo[cmp].bc;
-	
-	/*
-	for ( dpos = 0; dpos < bc; dpos++ ) {
-		
-		// build context
-		ctx_x = 0; ctx_y = 0;
-		for ( b_x = 1; b_x < 8; b_x++ ) {
-			for ( b_y = 1; b_y < 8; b_y++ )
-				if ( colldata[ cmp ][ zigzag[b_x+(b_y*8)] ][ dpos ] != 0 ) break;
-			if ( b_y < 8 ) ctx_x++;
-		}
-		for ( b_y = 1; b_y < 8; b_y++ ) {
-			for ( b_x = 1; b_x < 8; b_x++ )
-				if ( colldata[ cmp ][ zigzag[b_x+(b_y*8)] ][ dpos ] != 0 ) break;
-			if ( b_x < 8 ) ctx_y++;
-		}
-		// encode first row zero-distribution-list
-		model->shift_context( 0 ); // shift context
-		model->shift_context( ctx_x ); // shift context
-		encode_ari( ari_es_s, ari_es_esc, enc, model, zdstls_x[ dpos ] ); // encode symbol
-		// encode first col zero-distribution-list
-		model->shift_context( 1 ); // shift context
-		model->shift_context( ctx_y ); // shift context
-		encode_ari( ari_es_s, ari_es_esc, enc, model, zdstls_y[ dpos ] ); // encode symbol
-	}
-	*/
-	
-	// int pred; int lakh;
 	
 	// arithmetic encode zero-distribution-list (first row)
 	for ( dpos = 0; dpos < bc; dpos++ ) {
-		/*pred = 0;
-		for ( int i = 1; i < 8; i++ ) {
-			lakh = ( dpos > w ) ? ac_pred_coeff_v( cmp, zigzag[ i ], dpos ) : 0;
-			if ( ABS( lakh ) > 0 ) pred++;
-		}*/
 		model->shift_context( ( ctx_zdst[dpos] + 3 ) / 7 ); // shift context
 		model->shift_context( ctx_eobx[dpos] ); // shift context
-		// model->shift_context( pred ); // shift context
 		encode_ari( ari_es_s, ari_es_esc, enc, model, zdstls_x[ dpos ] ); // encode symbol
 	}
 	// arithmetic encode zero-distribution-list (first collumn)
 	for ( dpos = 0; dpos < bc; dpos++ ) {
-		/*pred = 0;
-		for ( int i = 1; i < 8; i++ ) {
-			lakh = ( dpos % w > 1 ) ? ac_pred_coeff_h( cmp, zigzag[ i * 8 ], dpos ) : 0;
-			if ( ABS( lakh ) > 0 ) pred++;
-		}*/
 		model->shift_context( ( ctx_zdst[dpos] + 3 ) / 7 ); // shift context
 		model->shift_context( ctx_eoby[dpos] ); // shift context
-		// model->shift_context( pred ); // shift context
 		encode_ari( ari_es_s, ari_es_esc, enc, model, zdstls_y[ dpos ] ); // encode symbol
 	}
 	
@@ -4998,7 +4956,7 @@ bool packJPG::pjg_encode_zdst_low( aricoder* enc, int cmp )
 /* -----------------------------------------------
 	encodes DC coefficients to pjg
 	----------------------------------------------- */
-bool packJPG::pjg_encode_dc( aricoder* enc, int cmp )
+INTERN bool packJPG::pjg_encode_dc( aricoder* enc, int cmp )
 {
 	unsigned char* segm_tab;
 	
@@ -5037,14 +4995,13 @@ bool packJPG::pjg_encode_dc( aricoder* enc, int cmp )
 	max_len = BITLEN1024P( max_val );
 	
 	// init models for bitlenghts and -patterns	
-	mod_len = new model_s( max_len + 1, ( segm_cnt[cmp] > max_len ) ? segm_cnt[cmp] : max_len + 1, 2 );
-	mod_res = new model_b( ( segm_cnt[cmp] < 16 ) ? 1 << 4 : segm_cnt[cmp], 2 );
-	mod_sgn = new model_b( 1, 0 );
+	mod_len = INIT_MODEL_S( max_len + 1, ( segm_cnt[cmp] > max_len ) ? segm_cnt[cmp] : max_len + 1, 2 );
+	mod_res = INIT_MODEL_B( ( segm_cnt[cmp] < 16 ) ? 1 << 4 : segm_cnt[cmp], 2 );
+	mod_sgn = INIT_MODEL_B( 1, 0 );
 	
 	// set width/height of each band
 	bc = cmpnfo[cmp].bc;
 	w = cmpnfo[cmp].bch;
-	// h = cmpnfo[cmp].bcv;
 	
 	// allocate memory for absolute values storage
 	absv_store = (unsigned short*) calloc ( bc, sizeof( short ) );
@@ -5119,7 +5076,7 @@ bool packJPG::pjg_encode_dc( aricoder* enc, int cmp )
 /* -----------------------------------------------
 	encodes high (7x7) AC coefficients to pjg
 	----------------------------------------------- */
-bool packJPG::pjg_encode_ac_high( aricoder* enc, int cmp )
+INTERN bool packJPG::pjg_encode_ac_high( aricoder* enc, int cmp )
 {
 	unsigned char* segm_tab;
 	
@@ -5139,7 +5096,6 @@ bool packJPG::pjg_encode_ac_high( aricoder* enc, int cmp )
 	unsigned char* sgn_store; // sign storage for context	
 	unsigned char* sgn_nbh; // left signs neighbor
 	unsigned char* sgn_nbv; // upper signs neighbor
-	// unsigned char* sgn_nbp; // preferred signs neighbor
 
 	int ctx_avr; // 'average' context
 	int ctx_len; // context for bit length
@@ -5164,14 +5120,13 @@ bool packJPG::pjg_encode_ac_high( aricoder* enc, int cmp )
 	segm_tab = segm_tables[ segm_cnt[ cmp ] - 1 ];
 	
 	// init models for bitlenghts and -patterns
-	mod_len = new model_s( 11, ( segm_cnt[cmp] > 11 ) ? segm_cnt[cmp] : 11, 2 );
-	mod_res = new model_b( ( segm_cnt[cmp] < 16 ) ? 1 << 4 : segm_cnt[cmp], 2 );
-	mod_sgn = new model_b( 9, 1 );
+	mod_len = INIT_MODEL_S( 11, ( segm_cnt[cmp] > 11 ) ? segm_cnt[cmp] : 11, 2 );
+	mod_res = INIT_MODEL_B( ( segm_cnt[cmp] < 16 ) ? 1 << 4 : segm_cnt[cmp], 2 );
+	mod_sgn = INIT_MODEL_B( 9, 1 );
 	
 	// set width/height of each band
 	bc = cmpnfo[cmp].bc;
 	w = cmpnfo[cmp].bch;
-	// h = cmpnfo[cmp].bcv;
 	
 	// allocate memory for absolute values & signs storage
 	absv_store = (unsigned short*) calloc ( bc, sizeof( short ) );	
@@ -5216,9 +5171,6 @@ bool packJPG::pjg_encode_ac_high( aricoder* enc, int cmp )
 		
 		// set up average context quick access arrays
 		pjg_aavrg_prepare( c_absc, c_weight, absv_store, cmp );
-		
-		// decide preferred direction for signs prediction
-		// sgn_nbp = ( b_x > b_y ) ? sgn_nbh : sgn_nbv;
 		
 		// locally store pointer to coefficients
 		coeffs = colldata[ cmp ][ bpos ];
@@ -5305,7 +5257,7 @@ bool packJPG::pjg_encode_ac_high( aricoder* enc, int cmp )
 /* -----------------------------------------------
 	encodes first row/col AC coefficients to pjg
 	----------------------------------------------- */
-bool packJPG::pjg_encode_ac_low( aricoder* enc, int cmp )
+INTERN bool packJPG::pjg_encode_ac_low( aricoder* enc, int cmp )
 {
 	model_s* mod_len;
 	model_b* mod_sgn;
@@ -5342,15 +5294,14 @@ bool packJPG::pjg_encode_ac_low( aricoder* enc, int cmp )
 	
 	
 	// init models for bitlenghts and -patterns
-	mod_len = new model_s( 11, ( segm_cnt[cmp] > 11 ) ? segm_cnt[cmp] : 11, 2 );
-	mod_res = new model_b( 1 << 4, 2 );
-	mod_top = new model_b( ( nois_trs[cmp] > 4 ) ? 1 << nois_trs[cmp] : 1 << 4, 3 );
-	mod_sgn = new model_b( 11, 1 );
+	mod_len = INIT_MODEL_S( 11, ( segm_cnt[cmp] > 11 ) ? segm_cnt[cmp] : 11, 2 );
+	mod_res = INIT_MODEL_B( 1 << 4, 2 );
+	mod_top = INIT_MODEL_B( ( nois_trs[cmp] > 4 ) ? 1 << nois_trs[cmp] : 1 << 4, 3 );
+	mod_sgn = INIT_MODEL_B( 11, 1 );
 	
 	// set width/height of each band
 	bc = cmpnfo[cmp].bc;
 	w = cmpnfo[cmp].bch;
-	// h = cmpnfo[cmp].bcv;
 	
 	// work through each first row / first collumn band
 	for ( i = 2; i < 16; i++ )
@@ -5470,14 +5421,14 @@ bool packJPG::pjg_encode_ac_low( aricoder* enc, int cmp )
 /* -----------------------------------------------
 	encodes a stream of generic (8bit) data to pjg
 	----------------------------------------------- */
-bool packJPG::pjg_encode_generic( aricoder* enc, unsigned char* data, int len )
+INTERN bool packJPG::pjg_encode_generic( aricoder* enc, unsigned char* data, int len )
 {
 	model_s* model;
 	int i;
 	
 	
 	// arithmetic encode data
-	model = new model_s( 256 + 1, 256, 1 );
+	model = INIT_MODEL_S( 256 + 1, 256, 1 );
 	for ( i = 0; i < len; i++ )
 	{
 		encode_ari( ari_es_s, ari_es_esc, enc, model, data[ i ] );
@@ -5495,13 +5446,13 @@ bool packJPG::pjg_encode_generic( aricoder* enc, unsigned char* data, int len )
 /* -----------------------------------------------
 	encodes one bit to pjg
 	----------------------------------------------- */
-bool packJPG::pjg_encode_bit( aricoder* enc, unsigned char bit )
+INTERN bool packJPG::pjg_encode_bit( aricoder* enc, unsigned char bit )
 {
 	model_b* model;
 	
 	
 	// encode one bit
-	model = new model_b( 1, -1 );
+	model = INIT_MODEL_B( 1, -1 );
 	encode_ari( ari_eb_s, enc, model, bit );
 	delete( model );
 	
@@ -5513,7 +5464,7 @@ bool packJPG::pjg_encode_bit( aricoder* enc, unsigned char bit )
 /* -----------------------------------------------
 	encodes frequency scanorder to pjg
 	----------------------------------------------- */
-bool packJPG::pjg_decode_zstscan( aricoder* dec, int cmp )
+INTERN bool packJPG::pjg_decode_zstscan( aricoder* dec, int cmp )
 {	
 	model_s* model;;
 	
@@ -5531,7 +5482,7 @@ bool packJPG::pjg_decode_zstscan( aricoder* dec, int cmp )
 		freqlist[ i ] = stdscan[ i ];
 		
 	// init model
-	model = new model_s( 64, 64, 1 );
+	model = INIT_MODEL_S( 64, 64, 1 );
 	
 	// encode scanorder
 	for ( i = 1; i < 64; i++ )
@@ -5579,7 +5530,7 @@ bool packJPG::pjg_decode_zstscan( aricoder* dec, int cmp )
 /* -----------------------------------------------
 	decodes # of non zeroes from pjg (high)
 	----------------------------------------------- */
-bool packJPG::pjg_decode_zdst_high( aricoder* dec, int cmp )
+INTERN bool packJPG::pjg_decode_zdst_high( aricoder* dec, int cmp )
 {
 	model_s* model;
 	
@@ -5591,7 +5542,7 @@ bool packJPG::pjg_decode_zdst_high( aricoder* dec, int cmp )
 	
 	
 	// init model, constants
-	model = new model_s( 49 + 1, 25 + 1, 1 );
+	model = INIT_MODEL_S( 49 + 1, 25 + 1, 1 );
 	zdstls = zdstdata[ cmp ];
 	w = cmpnfo[cmp].bch;
 	bc = cmpnfo[cmp].bc;
@@ -5619,7 +5570,7 @@ bool packJPG::pjg_decode_zdst_high( aricoder* dec, int cmp )
 /* -----------------------------------------------
 	decodes # of non zeroes from pjg (low)
 	----------------------------------------------- */	
-bool packJPG::pjg_decode_zdst_low( aricoder* dec, int cmp )
+INTERN bool packJPG::pjg_decode_zdst_low( aricoder* dec, int cmp )
 {
 	model_s* model;
 	
@@ -5634,13 +5585,12 @@ bool packJPG::pjg_decode_zdst_low( aricoder* dec, int cmp )
 	
 	
 	// init model, constants
-	model = new model_s( 8, 8, 2 );
+	model = INIT_MODEL_S( 8, 8, 2 );
 	zdstls_x = zdstxlow[ cmp ];
 	zdstls_y = zdstylow[ cmp ];
 	ctx_eobx = eobxhigh[ cmp ];
 	ctx_eoby = eobyhigh[ cmp ];
 	ctx_zdst = zdstdata[ cmp ];
-	// w = cmpnfo[cmp].bch;
 	bc = cmpnfo[cmp].bc;
 	
 	// arithmetic encode zero-distribution-list (first row)
@@ -5667,7 +5617,7 @@ bool packJPG::pjg_decode_zdst_low( aricoder* dec, int cmp )
 /* -----------------------------------------------
 	decodes DC coefficients from pjg
 	----------------------------------------------- */
-bool packJPG::pjg_decode_dc( aricoder* dec, int cmp )
+INTERN bool packJPG::pjg_decode_dc( aricoder* dec, int cmp )
 {
 	unsigned char* segm_tab;
 	
@@ -5706,14 +5656,13 @@ bool packJPG::pjg_decode_dc( aricoder* dec, int cmp )
 	max_len = BITLEN1024P( max_val );
 	
 	// init models for bitlenghts and -patterns
-	mod_len = new model_s( max_len + 1, ( segm_cnt[cmp] > max_len ) ? segm_cnt[cmp] : max_len + 1, 2 );
-	mod_res = new model_b( ( segm_cnt[cmp] < 16 ) ? 1 << 4 : segm_cnt[cmp], 2 );
-	mod_sgn = new model_b( 1, 0 );
+	mod_len = INIT_MODEL_S( max_len + 1, ( segm_cnt[cmp] > max_len ) ? segm_cnt[cmp] : max_len + 1, 2 );
+	mod_res = INIT_MODEL_B( ( segm_cnt[cmp] < 16 ) ? 1 << 4 : segm_cnt[cmp], 2 );
+	mod_sgn = INIT_MODEL_B( 1, 0 );
 	
 	// set width/height of each band
 	bc = cmpnfo[cmp].bc;
 	w = cmpnfo[cmp].bch;
-	// h = cmpnfo[cmp].bcv;
 	
 	// allocate memory for absolute values storage
 	absv_store = (unsigned short*) calloc ( bc, sizeof( short ) );
@@ -5788,7 +5737,7 @@ bool packJPG::pjg_decode_dc( aricoder* dec, int cmp )
 /* -----------------------------------------------
 	decodes high (7x7) AC coefficients to pjg
 	----------------------------------------------- */
-bool packJPG::pjg_decode_ac_high( aricoder* dec, int cmp )
+INTERN bool packJPG::pjg_decode_ac_high( aricoder* dec, int cmp )
 {
 	unsigned char* segm_tab;
 	
@@ -5808,7 +5757,6 @@ bool packJPG::pjg_decode_ac_high( aricoder* dec, int cmp )
 	unsigned char* sgn_store; // sign storage for context	
 	unsigned char* sgn_nbh; // left signs neighbor
 	unsigned char* sgn_nbv; // upper signs neighbor
-	// unsigned char* sgn_nbp; // preferred signs neighbor
 
 	int ctx_avr; // 'average' context
 	int ctx_len; // context for bit length
@@ -5825,7 +5773,7 @@ bool packJPG::pjg_decode_ac_high( aricoder* dec, int cmp )
 	
 	int b_x, b_y;
 	int p_x, p_y;
-	int r_x; //, r_y;
+	int r_x;
 	int w, bc;
 	
 	
@@ -5833,14 +5781,13 @@ bool packJPG::pjg_decode_ac_high( aricoder* dec, int cmp )
 	segm_tab = segm_tables[ segm_cnt[ cmp ] - 1 ];
 	
 	// init models for bitlenghts and -patterns
-	mod_len = new model_s( 11, ( segm_cnt[cmp] > 11 ) ? segm_cnt[cmp] : 11, 2 );
-	mod_res = new model_b( ( segm_cnt[cmp] < 16 ) ? 1 << 4 : segm_cnt[cmp], 2 );
-	mod_sgn = new model_b( 9, 1 );
+	mod_len = INIT_MODEL_S( 11, ( segm_cnt[cmp] > 11 ) ? segm_cnt[cmp] : 11, 2 );
+	mod_res = INIT_MODEL_B( ( segm_cnt[cmp] < 16 ) ? 1 << 4 : segm_cnt[cmp], 2 );
+	mod_sgn = INIT_MODEL_B( 9, 1 );
 	
 	// set width/height of each band
 	bc = cmpnfo[cmp].bc;
 	w = cmpnfo[cmp].bch;
-	// h = cmpnfo[cmp].bcv;
 	
 	// allocate memory for absolute values & signs storage
 	absv_store = (unsigned short*) calloc ( bc, sizeof( short ) );	
@@ -5885,9 +5832,6 @@ bool packJPG::pjg_decode_ac_high( aricoder* dec, int cmp )
 		
 		// set up average context quick access arrays
 		pjg_aavrg_prepare( c_absc, c_weight, absv_store, cmp );
-		
-		// decide preferred direction for signs prediction
-		// sgn_nbp = ( b_x > b_y ) ? sgn_nbh : sgn_nbv;
 		
 		// locally store pointer to coefficients
 		coeffs = colldata[ cmp ][ bpos ];
@@ -5974,7 +5918,7 @@ bool packJPG::pjg_decode_ac_high( aricoder* dec, int cmp )
 /* -----------------------------------------------
 	decodes high (7x7) AC coefficients to pjg
 	----------------------------------------------- */
-bool packJPG::pjg_decode_ac_low( aricoder* dec, int cmp )
+INTERN bool packJPG::pjg_decode_ac_low( aricoder* dec, int cmp )
 {
 	model_s* mod_len;
 	model_b* mod_sgn;
@@ -6011,15 +5955,14 @@ bool packJPG::pjg_decode_ac_low( aricoder* dec, int cmp )
 	
 	
 	// init models for bitlenghts and -patterns
-	mod_len = new model_s( 11, ( segm_cnt[cmp] > 11 ) ? segm_cnt[cmp] : 11, 2 );
-	mod_res = new model_b( 1 << 4, 2 );
-	mod_top = new model_b( ( nois_trs[cmp] > 4 ) ? 1 << nois_trs[cmp] : 1 << 4, 3 );
-	mod_sgn = new model_b( 11, 1 );
+	mod_len = INIT_MODEL_S( 11, ( segm_cnt[cmp] > 11 ) ? segm_cnt[cmp] : 11, 2 );
+	mod_res = INIT_MODEL_B( 1 << 4, 2 );
+	mod_top = INIT_MODEL_B( ( nois_trs[cmp] > 4 ) ? 1 << nois_trs[cmp] : 1 << 4, 3 );
+	mod_sgn = INIT_MODEL_B( 11, 1 );
 	
 	// set width/height of each band
 	bc = cmpnfo[cmp].bc;
 	w = cmpnfo[cmp].bch;
-	// h = cmpnfo[cmp].bcv;
 	
 	// work through each first row / first collumn band
 	for ( i = 2; i < 16; i++ )
@@ -6137,7 +6080,7 @@ bool packJPG::pjg_decode_ac_low( aricoder* dec, int cmp )
 /* -----------------------------------------------
 	deodes a stream of generic (8bit) data from pjg
 	----------------------------------------------- */
-bool packJPG::pjg_decode_generic( aricoder* dec, unsigned char** data, int* len )
+INTERN bool packJPG::pjg_decode_generic( aricoder* dec, unsigned char** data, int* len )
 {
 	abytewriter* bwrt;
 	model_s* model;
@@ -6148,7 +6091,7 @@ bool packJPG::pjg_decode_generic( aricoder* dec, unsigned char** data, int* len 
 	bwrt = new abytewriter( 1024 );
 	
 	// decode header, ending with 256 symbol
-	model = new model_s( 256 + 1, 256, 1 );
+	model = INIT_MODEL_S( 256 + 1, 256, 1 );
 	while ( true ) {
 		c = decode_ari( ari_ds_s, ari_ds_count, ari_ds_c, dec, model );
 		if ( c == 256 ) break;
@@ -6178,12 +6121,12 @@ bool packJPG::pjg_decode_generic( aricoder* dec, unsigned char** data, int* len 
 /* -----------------------------------------------
 	decodes one bit from pjg
 	----------------------------------------------- */
-bool packJPG::pjg_decode_bit( aricoder* dec, unsigned char* bit )
+INTERN bool packJPG::pjg_decode_bit( aricoder* dec, unsigned char* bit )
 {
 	model_b* model;
 	
 	
-	model = new model_b( 1, -1 );
+	model = INIT_MODEL_B( 1, -1 );
 	(*bit) = decode_ari( ari_db_s, ari_db_count, ari_db_c, dec, model );
 	delete( model );
 	
@@ -6195,7 +6138,7 @@ bool packJPG::pjg_decode_bit( aricoder* dec, unsigned char* bit )
 /* -----------------------------------------------
 	get zero sort frequency scan vector
 	----------------------------------------------- */
-void packJPG::pjg_get_zerosort_scan( unsigned char* sv, int cmp )
+INTERN void packJPG::pjg_get_zerosort_scan( unsigned char* sv, int cmp )
 {
 	unsigned int zdist[ 64 ]; // distributions of zeroes per band
 	int bc = cmpnfo[cmp].bc;
@@ -6239,7 +6182,7 @@ void packJPG::pjg_get_zerosort_scan( unsigned char* sv, int cmp )
 /* -----------------------------------------------
 	optimizes JFIF header for compression
 	----------------------------------------------- */
-bool packJPG::pjg_optimize_header( void )
+INTERN bool packJPG::pjg_optimize_header( void )
 {
 	unsigned char  type = 0x00; // type of current marker segment
 	unsigned int   len  = 0; // length of current marker segment
@@ -6318,7 +6261,7 @@ bool packJPG::pjg_optimize_header( void )
 /* -----------------------------------------------
 	undoes the header optimizations
 	----------------------------------------------- */
-bool packJPG::pjg_unoptimize_header( void )
+INTERN bool packJPG::pjg_unoptimize_header( void )
 {
 	unsigned char  type = 0x00; // type of current marker segment
 	unsigned int   len  = 0; // length of current marker segment
@@ -6387,7 +6330,7 @@ bool packJPG::pjg_unoptimize_header( void )
 /* -----------------------------------------------
 	preparations for special average context
 	----------------------------------------------- */
-void packJPG::pjg_aavrg_prepare( unsigned short** abs_coeffs, int* weights, unsigned short* abs_store, int cmp )
+INTERN void packJPG::pjg_aavrg_prepare( unsigned short** abs_coeffs, int* weights, unsigned short* abs_store, int cmp )
 {
 	int w = cmpnfo[cmp].bch;
 	
@@ -6411,7 +6354,7 @@ void packJPG::pjg_aavrg_prepare( unsigned short** abs_coeffs, int* weights, unsi
 /* -----------------------------------------------
 	special average context used in coeff encoding
 	----------------------------------------------- */
-int packJPG::pjg_aavrg_context( unsigned short** abs_coeffs, int* weights, int pos, int p_y, int p_x, int r_x )
+INTERN int packJPG::pjg_aavrg_context( unsigned short** abs_coeffs, int* weights, int pos, int p_y, int p_x, int r_x )
 {
 	int ctx_avr = 0; // AVERAGE context
 	int w_ctx = 0; // accumulated weight of context
@@ -6468,7 +6411,7 @@ int packJPG::pjg_aavrg_context( unsigned short** abs_coeffs, int* weights, int p
 /* -----------------------------------------------
 	lakhani ac context used in coeff encoding
 	----------------------------------------------- */
-int packJPG::pjg_lakh_context( signed short** coeffs_x, signed short** coeffs_a, int* pred_cf, int pos )
+INTERN int packJPG::pjg_lakh_context( signed short** coeffs_x, signed short** coeffs_a, int* pred_cf, int pos )
 {
 	int pred = 0;
 	
@@ -6492,7 +6435,7 @@ int packJPG::pjg_lakh_context( signed short** coeffs_x, signed short** coeffs_a,
 /* -----------------------------------------------
 	Calculates coordinates for nearest neighbor context
 	----------------------------------------------- */
-void packJPG::get_context_nnb( int pos, int w, int *a, int *b )
+INTERN void packJPG::get_context_nnb( int pos, int w, int *a, int *b )
 {
 	// this function calculates and returns coordinates for
 	// a simple 2D context
@@ -6520,100 +6463,6 @@ void packJPG::get_context_nnb( int pos, int w, int *a, int *b )
 	}
 }
 
-
-/* -----------------------------------------------
-	Calculates coordinates for horizontal context
-	----------------------------------------------- */
-void packJPG::get_context_hor( int pos, int w, int *a, int *b )
-{
-	// this function calculates and returns coordinates for
-	// a simple horizontal context
-	if ( pos == 0 ) {
-		*a = -1;
-		*b = -1;
-	}
-	else if ( ( pos % w ) == 0 ) {
-		*a = pos - w;
-		if ( pos >= ( w << 1 ) )
-			*b = pos - ( w << 1 );
-		else
-			*b = *a;
-	}
-	else if ( ( pos % w ) == 1 ) {
-		*a = pos - 1;
-		if ( pos >= w )
-			*b = pos - w - 1;
-		else
-			*b = *a;
-	}
-	else {
-		*a = pos - 1;
-		*b = pos - 2;
-	}
-}
-
-
-/* -----------------------------------------------
-	Calculates coordinates for vertical context
-	----------------------------------------------- */
-void packJPG::get_context_ver( int pos, int w, int *a, int *b )
-{
-	// this function calculates and returns coordinates for
-	// a simple vertical context
-	if ( pos == 0 ) {
-		*a = -1;
-		*b = -1;
-	}
-	else if ( pos < w ) {
-		*a = pos - 1;
-		if ( pos >= 2 )
-			*b = pos - 2;
-		else
-			*b = *a;
-	}
-	else if ( pos < ( w << 1 ) ) {
-		*a = pos - w;
-		if ( ( pos % w ) >= 1 )
-			*b = pos - w - 1;
-		else
-			*b = *a;
-	}
-	else {
-		*a = pos - w;
-		*b = pos - (w << 1);
-	}
-}
-
-
-/* -----------------------------------------------
-	Calculates coordinates for simple 2D context v2
-	----------------------------------------------- */
-void packJPG::get_context_dia( int cmp, int dpos, int *a, int *b, int *c )
-{
-	// this function calculates and returns coordinates for
-	// a simple 2D context
-	if ( dpos == 0 ) {
-		*a = -1;
-		*b = -1;
-		*c = -1;
-	}
-	else if ( (dpos % cmpnfo[cmp].bch) == 0 ) {
-		*b = dpos - cmpnfo[cmp].bch;
-		*a = -1;
-		*c = -1;
-	}
-	else if ( dpos < cmpnfo[cmp].bch ) {
-		*a = dpos - 1;
-		*b = -1;
-		*c = -1;
-	}
-	else {
-		*a = dpos - 1;
-		*b = dpos - cmpnfo[cmp].bch;
-		*c = dpos - cmpnfo[cmp].bch - 1;
-	}
-}
-
 /* ----------------------- End of PJG specific functions -------------------------- */
 
 /* ----------------------- Begin ofDCT specific functions -------------------------- */
@@ -6622,7 +6471,8 @@ void packJPG::get_context_dia( int cmp, int dpos, int *a, int *b, int *c )
 /* -----------------------------------------------
 	inverse DCT transform using precalc tables (fast)
 	----------------------------------------------- */
-int packJPG::idct_2d_fst_8x8( int cmp, int dpos, int ix, int iy )
+#if !defined(BUILD_LIB) && defined(DEV_BUILD)
+INTERN int packJPG::idct_2d_fst_8x8( int cmp, int dpos, int ix, int iy )
 {
 	int idct = 0;
 	int ixy;
@@ -6700,12 +6550,13 @@ int packJPG::idct_2d_fst_8x8( int cmp, int dpos, int ix, int iy )
 	
 	return idct;
 }
+#endif
 
 
 /* -----------------------------------------------
 	inverse DCT transform using precalc tables (fast)
 	----------------------------------------------- */
-int packJPG::idct_2d_fst_8x1( int cmp, int dpos, int ix, int iy )
+INTERN int packJPG::idct_2d_fst_8x1( int cmp, int dpos, int ix, int iy )
 {
 	int idct = 0;
 	int ixy;
@@ -6732,7 +6583,7 @@ int packJPG::idct_2d_fst_8x1( int cmp, int dpos, int ix, int iy )
 /* -----------------------------------------------
 	inverse DCT transform using precalc tables (fast)
 	----------------------------------------------- */
-int packJPG::idct_2d_fst_1x8( int cmp, int dpos, int ix, int iy )
+INTERN int packJPG::idct_2d_fst_1x8( int cmp, int dpos, int ix, int iy )
 {
 	int idct = 0;
 	int ixy;
@@ -6764,7 +6615,7 @@ int packJPG::idct_2d_fst_1x8( int cmp, int dpos, int ix, int iy )
 	returns predictor for collection data
 	----------------------------------------------- */
 #if defined(USE_PLOCOI)
-int packJPG::dc_coll_predictor( int cmp, int dpos )
+INTERN int packJPG::dc_coll_predictor( int cmp, int dpos )
 {
 	signed short* coefs = colldata[ cmp ][ 0 ];
 	int w = cmpnfo[cmp].bch;
@@ -6795,7 +6646,7 @@ int packJPG::dc_coll_predictor( int cmp, int dpos )
 	1D DCT predictor for DC coefficients
 	----------------------------------------------- */
 #if !defined(USE_PLOCOI)
-int packJPG::dc_1ddct_predictor( int cmp, int dpos )
+INTERN int packJPG::dc_1ddct_predictor( int cmp, int dpos )
 {
 	int w  = cmpnfo[cmp].bch;
 	int px = ( dpos % w );
@@ -6850,102 +6701,9 @@ int packJPG::dc_1ddct_predictor( int cmp, int dpos )
 
 
 /* -----------------------------------------------
-	Gopal Lakhani AC predictor (hor)
-	----------------------------------------------- */
-int packJPG::ac_pred_coeff_h( int cmp, int bpos, int dpos )
-{
-	// no edge treatment, no security checks here
-	// you have to be careful using this function!
-	
-	int np0 = unzigzag[ bpos ];
-	int dp0 = dpos - 1;
-	int cfa[ 8 ];
-	int cfx[ 8 ];
-	int pred;
-	int zz;
-	int i;
-	
-	
-	// fetch coefs
-	for ( i = 0; i < 8; i++ ) {
-		zz = zigzag[ np0 + i ];
-		cfa[ i ] = colldata[ cmp ][ zz ][ dp0  ] * QUANT( cmp, zz );
-		cfx[ i ] = colldata[ cmp ][ zz ][ dpos ] * QUANT( cmp, zz );
-	}
-	
-	// predict coefficient
-	pred = ac_pred_coeff( cfa, cfx );
-	
-	// normalize / quantize prediction
-	pred = pred / QUANT( cmp, bpos );
-	pred = DCT_RESCALE( pred );
-	
-	return pred;
-}
-
-
-/* -----------------------------------------------
-	Gopal Lakhani AC predictor (ver)
-	----------------------------------------------- */
-int packJPG::ac_pred_coeff_v( int cmp, int bpos, int dpos )
-{
-	// no edge treatment, no security checks here
-	// you have to be careful using this function!
-	
-	int np0 = unzigzag[ bpos ];
-	int dp0 = dpos - cmpnfo[cmp].bch;
-	int cfa[ 8 ];
-	int cfx[ 8 ];
-	int pred;
-	int zz;
-	int i;
-	
-	
-	// fetch coefs
-	for ( i = 0; i < 8; i++ ) {
-		zz = zigzag[ np0 + (i<<3) ];
-		cfa[ i ] = colldata[ cmp ][ zz ][ dp0  ] * QUANT( cmp, zz );
-		cfx[ i ] = colldata[ cmp ][ zz ][ dpos ] * QUANT( cmp, zz );
-	}
-	
-	// predict coefficient
-	pred = ac_pred_coeff( cfa, cfx );
-	
-	// normalize / quantize prediction
-	pred = pred / QUANT( cmp, bpos );
-	pred = DCT_RESCALE( pred );
-	
-	return pred;
-}
-
-
-/* -----------------------------------------------
-	Gopal Lakhani AC predictor (universal)
-	----------------------------------------------- */
-int packJPG::ac_pred_coeff( int* cfa, int* cfx )
-{
-	int pred;
-	
-	// calculate prediction
-	pred = cfa[ 0 ] * 8192;
-	pred -= ( cfx[ 1 ] + cfa[ 1 ] ) * 11363;
-	pred -= ( cfx[ 2 ] - cfa[ 2 ] ) * 10703;
-	pred -= ( cfx[ 3 ] + cfa[ 3 ] ) *  9633;
-	pred -= ( cfx[ 4 ] - cfa[ 4 ] ) *  8192;
-	pred -= ( cfx[ 5 ] + cfa[ 5 ] ) *  6436;
-	pred -= ( cfx[ 6 ] - cfa[ 6 ] ) *  4433;
-	pred -= ( cfx[ 7 ] + cfa[ 7 ] ) *  2260;
-	// for ( int i = 1; i < 8; i++ )
-	//	pred -= ( cfx[ i ] + ( ( i % 2 == 0 ) ? -1 : 1 ) * cfa[ i ] ) * icos_base_8x8[ i * 8 ];
-	
-	return pred;
-}
-
-
-/* -----------------------------------------------
 	loco-i predictor
 	----------------------------------------------- */
-inline int packJPG::plocoi( int a, int b, int c )
+INTERN inline int packJPG::plocoi( int a, int b, int c )
 {
 	// a -> left; b -> above; c -> above-left
 	int min, max;
@@ -6963,7 +6721,7 @@ inline int packJPG::plocoi( int a, int b, int c )
 /* -----------------------------------------------
 	calculates median out of an integer array
 	----------------------------------------------- */
-inline int packJPG::median_int( int* values, int size )
+INTERN inline int packJPG::median_int( int* values, int size )
 {
 	int middle = ( size >> 1 );
 	bool done;
@@ -6993,7 +6751,7 @@ inline int packJPG::median_int( int* values, int size )
 /* -----------------------------------------------
 	calculates median out of an float array
 	----------------------------------------------- */
-inline float packJPG::median_float( float* values, int size )
+INTERN inline float packJPG::median_float( float* values, int size )
 {
 	int middle = ( size >> 1 );
 	bool done;
@@ -7031,7 +6789,7 @@ inline float packJPG::median_float( float* values, int size )
 	displays progress bar on screen
 	----------------------------------------------- */
 #if !defined(BUILD_LIB)
-inline void packJPG::progress_bar( int current, int last )
+INTERN inline void packJPG::progress_bar( int current, int last )
 {
 	int barpos = ( ( current * BARLEN ) + ( last / 2 ) ) / last;
 	int i;
@@ -7039,7 +6797,7 @@ inline void packJPG::progress_bar( int current, int last )
 	
 	// generate progress bar
 	fprintf( msgout, "[" );
-	#if !defined(UNIX) && !defined (__LINUX__)
+	#if defined(_WIN32)
 	for ( i = 0; i < barpos; i++ )
 		fprintf( msgout, "\xFE" );
 	#else
@@ -7056,7 +6814,7 @@ inline void packJPG::progress_bar( int current, int last )
 	creates filename, callocs memory for it
 	----------------------------------------------- */
 #if !defined(BUILD_LIB)
-inline char* packJPG::create_filename( const char* base, const char* extension )
+INTERN inline char* packJPG::create_filename( const char* base, const char* extension )
 {
 	int len = strlen( base ) + ( ( extension == NULL ) ? 0 : strlen( extension ) + 1 ) + 1;	
 	char* filename = (char*) calloc( len, sizeof( char ) );	
@@ -7073,7 +6831,7 @@ inline char* packJPG::create_filename( const char* base, const char* extension )
 	creates filename, callocs memory for it
 	----------------------------------------------- */
 #if !defined(BUILD_LIB)
-inline char* packJPG::unique_filename( const char* base, const char* extension )
+INTERN inline char* packJPG::unique_filename( const char* base, const char* extension )
 {
 	int len = strlen( base ) + ( ( extension == NULL ) ? 0 : strlen( extension ) + 1 ) + 1;	
 	char* filename = (char*) calloc( len, sizeof( char ) );	
@@ -7095,7 +6853,7 @@ inline char* packJPG::unique_filename( const char* base, const char* extension )
 	changes extension of filename
 	----------------------------------------------- */
 #if !defined(BUILD_LIB)
-inline void packJPG::set_extension( char* filename, const char* extension )
+INTERN inline void packJPG::set_extension( char* filename, const char* extension )
 {
 	char* extstr;
 	
@@ -7117,7 +6875,7 @@ inline void packJPG::set_extension( char* filename, const char* extension )
 	adds underscore after filename
 	----------------------------------------------- */
 #if !defined(BUILD_LIB)
-inline void packJPG::add_underscore( char* filename )
+INTERN inline void packJPG::add_underscore( char* filename )
 {
 	char* tmpname = (char*) calloc( strlen( filename ) + 1, sizeof( char ) );
 	char* extstr;
@@ -7143,7 +6901,7 @@ inline void packJPG::add_underscore( char* filename )
 /* -----------------------------------------------
 	checks if a file exists
 	----------------------------------------------- */
-inline bool packJPG::file_exists( const char* filename )
+INTERN inline bool packJPG::file_exists( const char* filename )
 {
 	// needed for both, executable and library
 	FILE* fp = fopen( filename, "rb" );
@@ -7164,10 +6922,10 @@ inline bool packJPG::file_exists( const char* filename )
 	Writes header file
 	----------------------------------------------- */
 #if !defined(BUILD_LIB) && defined(DEV_BUILD)
-bool packJPG::dump_hdr( void )
+INTERN bool packJPG::dump_hdr( void )
 {
 	const char* ext = "hdr";
-	const char* basename = basfilename;
+	const char* basename = filelist[ file_no ];
 	
 	if ( !dump_file( basename, ext, hdrdata, 1, hdrs ) )
 		return false;	
@@ -7181,10 +6939,10 @@ bool packJPG::dump_hdr( void )
 	Writes huffman coded file
 	----------------------------------------------- */
 #if !defined(BUILD_LIB) && defined(DEV_BUILD)
-bool packJPG::dump_huf( void )
+INTERN bool packJPG::dump_huf( void )
 {
 	const char* ext = "huf";
-	const char* basename = basfilename;
+	const char* basename = filelist[ file_no ];
 	
 	if ( !dump_file( basename, ext, huffdata, 1, hufs ) )
 		return false;
@@ -7198,7 +6956,7 @@ bool packJPG::dump_huf( void )
 	Writes collections of DCT coefficients
 	----------------------------------------------- */
 #if !defined(BUILD_LIB) && defined(DEV_BUILD)
-bool packJPG::dump_coll( void )
+INTERN bool packJPG::dump_coll( void )
 {
 	FILE* fp;
 	
@@ -7212,7 +6970,7 @@ bool packJPG::dump_coll( void )
 	ext[1] = "coll1";
 	ext[2] = "coll2";
 	ext[3] = "coll3";
-	base = basfilename;
+	base = filelist[ file_no ];
 	
 	
 	for ( cmp = 0; cmp < cmpc; cmp++ ) {
@@ -7309,7 +7067,7 @@ bool packJPG::dump_coll( void )
 	Writes zero distribution data to file;
 	----------------------------------------------- */
 #if !defined(BUILD_LIB) && defined(DEV_BUILD)
-bool packJPG::dump_zdst( void )
+INTERN bool packJPG::dump_zdst( void )
 {
 	const char* ext[4];
 	const char* basename;
@@ -7320,7 +7078,7 @@ bool packJPG::dump_zdst( void )
 	ext[1] = "zdst1";
 	ext[2] = "zdst2";
 	ext[3] = "zdst3";
-	basename = basfilename;
+	basename = filelist[ file_no ];
 	
 	for ( cmp = 0; cmp < cmpc; cmp++ )
 		if ( !dump_file( basename, ext[cmp], zdstdata[cmp], 1, cmpnfo[cmp].bc ) )
@@ -7336,7 +7094,7 @@ bool packJPG::dump_zdst( void )
 	Writes to file
 	----------------------------------------------- */
 #if !defined(BUILD_LIB) && defined(DEV_BUILD)
-bool packJPG::dump_file( const char* base, const char* ext, void* data, int bpv, int size )
+INTERN bool packJPG::dump_file( const char* base, const char* ext, void* data, int bpv, int size )
 {	
 	FILE* fp;
 	char* fn;
@@ -7366,7 +7124,7 @@ bool packJPG::dump_file( const char* base, const char* ext, void* data, int bpv,
 	Writes error info file
 	----------------------------------------------- */
 #if !defined(BUILD_LIB) && defined(DEV_BUILD)
-bool packJPG::dump_errfile( void )
+INTERN bool packJPG::dump_errfile( void )
 {
 	FILE* fp;
 	char* fn;
@@ -7377,10 +7135,10 @@ bool packJPG::dump_errfile( void )
 	
 	// create filename based on errorlevel
 	if ( errorlevel == 1 ) {
-		fn = create_filename( basfilename, "wrn.nfo" );
+		fn = create_filename( filelist[ file_no ], "wrn.nfo" );
 	}
 	else {
-		fn = create_filename( basfilename, "err.nfo" );
+		fn = create_filename( filelist[ file_no ], "err.nfo" );
 	}
 	
 	// open file for output
@@ -7393,11 +7151,10 @@ bool packJPG::dump_errfile( void )
 	free( fn );
 	
 	// write status and errormessage to file
-	fprintf( fp, "--> error (level %i) in file \"%s\" <--\n", errorlevel, basfilename );
+	fprintf( fp, "--> error (level %i) in file \"%s\" <--\n", errorlevel, filelist[ file_no ] );
 	fprintf( fp, "\n" );
 	// write error specification to file
-	get_status( errorfunction );
-	fprintf( fp, " %s -> %s:\n", statusmessage,
+	fprintf( fp, " %s -> %s:\n", get_status( errorfunction ),
 			( errorlevel == 1 ) ? "warning" : "error" );
 	fprintf( fp, " %s\n", errormessage );
 	
@@ -7414,7 +7171,7 @@ bool packJPG::dump_errfile( void )
 	Writes info to textfile
 	----------------------------------------------- */
 #if !defined(BUILD_LIB) && defined(DEV_BUILD)
-bool packJPG::dump_info( void )
+INTERN bool packJPG::dump_info( void )
 {	
 	FILE* fp;
 	char* fn;
@@ -7428,7 +7185,7 @@ bool packJPG::dump_info( void )
 	
 	
 	// create filename
-	fn = create_filename( basfilename, "nfo" );
+	fn = create_filename( filelist[ file_no ], "nfo" );
 	
 	// open file for output
 	fp = fopen( fn, "w" );
@@ -7506,7 +7263,7 @@ bool packJPG::dump_info( void )
 	Writes distribution for use in valdist.h
 	----------------------------------------------- */
 #if !defined(BUILD_LIB) && defined(DEV_BUILD)
-bool packJPG::dump_dist( void )
+INTERN bool packJPG::dump_dist( void )
 {
 	FILE* fp;
 	char* fn;
@@ -7517,7 +7274,7 @@ bool packJPG::dump_dist( void )
 	
 	
 	// create filename
-	fn = create_filename( basfilename, "dist" );
+	fn = create_filename( filelist[ file_no ], "dist" );
 	
 	// open file for output
 	fp = fopen( fn, "wb" );
@@ -7553,7 +7310,7 @@ bool packJPG::dump_dist( void )
 	Do inverse DCT and write pgms
 	----------------------------------------------- */
 #if !defined(BUILD_LIB) && defined(DEV_BUILD)
-bool packJPG::dump_pgm( void )
+INTERN bool packJPG::dump_pgm( void )
 {	
 	unsigned char* imgdata;
 	
@@ -7576,7 +7333,7 @@ bool packJPG::dump_pgm( void )
 	for ( cmp = 0; cmp < cmpc; cmp++ )
 	{
 		// create filename
-		fn = create_filename( basfilename, ext[ cmp ] );
+		fn = create_filename( filelist[ file_no ], ext[ cmp ] );
 		
 		// open file for output
 		fp = fopen( fn, "wb" );		
@@ -7614,7 +7371,7 @@ bool packJPG::dump_pgm( void )
 		// write PGM header
 		fprintf( fp, "P5\n" );
 		fprintf( fp, "# created by %s v%i.%i%s (%s) by %s\n",
-			apptitle, pjgversion / 10, pjgversion % 10, subversion, versiondate, author );
+			apptitle, appversion / 10, appversion % 10, subversion, versiondate, author );
 		fprintf( fp, "%i %i\n", cmpnfo[cmp].bch * 8, cmpnfo[cmp].bcv * 8 );
 		fprintf( fp, "255\n" );
 		

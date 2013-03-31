@@ -20,7 +20,8 @@ EXPORT bool pjglib_convert_stream2stream( void* p, char* msg );
 EXPORT bool pjglib_convert_file2file( void* p, char* in, char* out, char* msg );
 EXPORT bool pjglib_convert_stream2mem( void* p, unsigned char** out_file, unsigned int* out_size, char* msg );
 EXPORT void pjglib_init_streams( void* p, void* in_src, int in_type, int in_size, void* out_dest, int out_type );
-EXPORT void pjglib_version_info( char* msg );
+EXPORT const char* pjglib_version_info( void );
+EXPORT const char* pjglib_short_name( void );
 
 /* a short reminder about input/output stream types
    for the pjglib_init_streams() function

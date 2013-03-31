@@ -11,7 +11,8 @@ IMPORT bool pjglib_convert_stream2stream( void* p, char* msg );
 IMPORT bool pjglib_convert_file2file( void* p, char* in, char* out, char* msg );
 IMPORT bool pjglib_convert_stream2mem( void* p, unsigned char** out_file, unsigned int* out_size, char* msg );
 IMPORT void pjglib_init_streams( void* p, void* in_src, int in_type, int in_size, void* out_dest, int out_type );
-IMPORT void pjglib_version_info( void* p, char* msg );
+IMPORT const char* pjglib_version_info( void );
+IMPORT const char* pjglib_short_name( void );
 
 /* a short reminder about input/output stream types
    for the pjglib_init_streams() function

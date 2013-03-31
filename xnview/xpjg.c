@@ -22,7 +22,7 @@
 #ifndef __cplusplus
 typedef int bool;
 #endif
-#include "../packJPG/packJPGlib.h"
+#include "../packJPG/packjpglib.h"
 
 
 

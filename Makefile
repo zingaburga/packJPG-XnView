@@ -1,6 +1,7 @@
 
 XNVIEW_PLUGIN = xnview/Xpjg.usr
 PACKJPG_LIB = packJPG/bitops.o packJPG/aricoder.o packJPG/packjpg.o
+#PACKJPG_LIB = packJPG/packJPGlib.a
 LIBJPEG_LIB = libjpeg-turbo/.libs/libjpeg.a
 CPPFLAGS = -Wall -Wl,--kill-at -s -O2 -shared -o $(XNVIEW_PLUGIN) $(PACKJPG_LIB) xnview/xpjg.o $(LIBJPEG_LIB) -static-libgcc
 
@@ -22,7 +23,7 @@ fprofile-generate:
 	g++ -fprofile-generate $(CPPFLAGS)
 
 $(PACKJPG_LIB): 
-	cd packJPG && make --makefile=Makefile_dll
+	cd packJPG && make --makefile=Makefile_lib
 
 $(LIBJPEG_LIB):
 	echo "Please build libjpeg"
