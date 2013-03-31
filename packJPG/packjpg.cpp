@@ -468,7 +468,8 @@ INTERN void get_context_nnb( int pos, int w, int *a, int *b );
 	----------------------------------------------- */
 
 #if !defined(BUILD_LIB) && defined(DEV_BUILD)
-INTERN int idct_2d_fst_8x8( int cmp, int dpos, int ix, int iy );
+INTERN void idct_2d_fst_8x8_cache( int cmp, int dpos, int cache[64] );
+INTERN int idct_2d_fst_8x8_cached( int cache[64], int cmp, int ix, int iy );
 #endif
 INTERN int idct_2d_fst_1x8( int cmp, int dpos, int ix, int iy );
 INTERN int idct_2d_fst_8x1( int cmp, int dpos, int ix, int iy );
@@ -6472,81 +6473,84 @@ INTERN void packJPG::get_context_nnb( int pos, int w, int *a, int *b )
 	inverse DCT transform using precalc tables (fast)
 	----------------------------------------------- */
 #if !defined(BUILD_LIB) && defined(DEV_BUILD)
-INTERN int packJPG::idct_2d_fst_8x8( int cmp, int dpos, int ix, int iy )
+INTERN void packJPG::idct_2d_fst_8x8_cache( int cmp, int dpos, int cache[64] )
+{
+	cache[ 0] = colldata[ cmp ][  0 ][ dpos ];
+	cache[ 1] = colldata[ cmp ][  1 ][ dpos ];
+	cache[ 2] = colldata[ cmp ][  5 ][ dpos ];
+	cache[ 3] = colldata[ cmp ][  6 ][ dpos ];
+	cache[ 4] = colldata[ cmp ][ 14 ][ dpos ];
+	cache[ 5] = colldata[ cmp ][ 15 ][ dpos ];
+	cache[ 6] = colldata[ cmp ][ 27 ][ dpos ];
+	cache[ 7] = colldata[ cmp ][ 28 ][ dpos ];
+	cache[ 8] = colldata[ cmp ][  2 ][ dpos ];
+	cache[ 9] = colldata[ cmp ][  4 ][ dpos ];
+	cache[10] = colldata[ cmp ][  7 ][ dpos ];
+	cache[11] = colldata[ cmp ][ 13 ][ dpos ];
+	cache[12] = colldata[ cmp ][ 16 ][ dpos ];
+	cache[13] = colldata[ cmp ][ 26 ][ dpos ];
+	cache[14] = colldata[ cmp ][ 29 ][ dpos ];
+	cache[15] = colldata[ cmp ][ 42 ][ dpos ];
+	cache[16] = colldata[ cmp ][  3 ][ dpos ];
+	cache[17] = colldata[ cmp ][  8 ][ dpos ];
+	cache[18] = colldata[ cmp ][ 12 ][ dpos ];
+	cache[19] = colldata[ cmp ][ 17 ][ dpos ];
+	cache[20] = colldata[ cmp ][ 25 ][ dpos ];
+	cache[21] = colldata[ cmp ][ 30 ][ dpos ];
+	cache[22] = colldata[ cmp ][ 41 ][ dpos ];
+	cache[23] = colldata[ cmp ][ 43 ][ dpos ];
+	cache[24] = colldata[ cmp ][  9 ][ dpos ];
+	cache[25] = colldata[ cmp ][ 11 ][ dpos ];
+	cache[26] = colldata[ cmp ][ 18 ][ dpos ];
+	cache[27] = colldata[ cmp ][ 24 ][ dpos ];
+	cache[28] = colldata[ cmp ][ 31 ][ dpos ];
+	cache[29] = colldata[ cmp ][ 40 ][ dpos ];
+	cache[30] = colldata[ cmp ][ 44 ][ dpos ];
+	cache[31] = colldata[ cmp ][ 53 ][ dpos ];
+	cache[32] = colldata[ cmp ][ 10 ][ dpos ];
+	cache[33] = colldata[ cmp ][ 19 ][ dpos ];
+	cache[34] = colldata[ cmp ][ 23 ][ dpos ];
+	cache[35] = colldata[ cmp ][ 32 ][ dpos ];
+	cache[36] = colldata[ cmp ][ 39 ][ dpos ];
+	cache[37] = colldata[ cmp ][ 45 ][ dpos ];
+	cache[38] = colldata[ cmp ][ 52 ][ dpos ];
+	cache[39] = colldata[ cmp ][ 54 ][ dpos ];
+	cache[40] = colldata[ cmp ][ 20 ][ dpos ];
+	cache[41] = colldata[ cmp ][ 22 ][ dpos ];
+	cache[42] = colldata[ cmp ][ 33 ][ dpos ];
+	cache[43] = colldata[ cmp ][ 38 ][ dpos ];
+	cache[44] = colldata[ cmp ][ 46 ][ dpos ];
+	cache[45] = colldata[ cmp ][ 51 ][ dpos ];
+	cache[46] = colldata[ cmp ][ 55 ][ dpos ];
+	cache[47] = colldata[ cmp ][ 60 ][ dpos ];
+	cache[48] = colldata[ cmp ][ 21 ][ dpos ];
+	cache[49] = colldata[ cmp ][ 34 ][ dpos ];
+	cache[50] = colldata[ cmp ][ 37 ][ dpos ];
+	cache[51] = colldata[ cmp ][ 47 ][ dpos ];
+	cache[52] = colldata[ cmp ][ 50 ][ dpos ];
+	cache[53] = colldata[ cmp ][ 56 ][ dpos ];
+	cache[54] = colldata[ cmp ][ 59 ][ dpos ];
+	cache[55] = colldata[ cmp ][ 61 ][ dpos ];
+	cache[56] = colldata[ cmp ][ 35 ][ dpos ];
+	cache[57] = colldata[ cmp ][ 36 ][ dpos ];
+	cache[58] = colldata[ cmp ][ 48 ][ dpos ];
+	cache[59] = colldata[ cmp ][ 49 ][ dpos ];
+	cache[60] = colldata[ cmp ][ 57 ][ dpos ];
+	cache[61] = colldata[ cmp ][ 58 ][ dpos ];
+	cache[62] = colldata[ cmp ][ 62 ][ dpos ];
+	cache[63] = colldata[ cmp ][ 63 ][ dpos ];
+}
+INTERN int packJPG::idct_2d_fst_8x8_cached( int cache[64], int cmp, int ix, int iy )
 {
 	int idct = 0;
-	int ixy;
-	
+	int ixy, i;
 	
 	// calculate start index
 	ixy = ( ( iy << 3 ) + ix ) << 6;
-	
-	// begin transform
-	idct += colldata[ cmp ][  0 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 0 ];
-	idct += colldata[ cmp ][  1 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 1 ];
-	idct += colldata[ cmp ][  5 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 2 ];
-	idct += colldata[ cmp ][  6 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 3 ];
-	idct += colldata[ cmp ][ 14 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 4 ];
-	idct += colldata[ cmp ][ 15 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 5 ];
-	idct += colldata[ cmp ][ 27 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 6 ];
-	idct += colldata[ cmp ][ 28 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 7 ];
-	idct += colldata[ cmp ][  2 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 8 ];
-	idct += colldata[ cmp ][  4 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 9 ];
-	idct += colldata[ cmp ][  7 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 10 ];
-	idct += colldata[ cmp ][ 13 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 11 ];
-	idct += colldata[ cmp ][ 16 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 12 ];
-	idct += colldata[ cmp ][ 26 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 13 ];
-	idct += colldata[ cmp ][ 29 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 14 ];
-	idct += colldata[ cmp ][ 42 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 15 ];
-	idct += colldata[ cmp ][  3 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 16 ];
-	idct += colldata[ cmp ][  8 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 17 ];
-	idct += colldata[ cmp ][ 12 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 18 ];
-	idct += colldata[ cmp ][ 17 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 19 ];
-	idct += colldata[ cmp ][ 25 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 20 ];
-	idct += colldata[ cmp ][ 30 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 21 ];
-	idct += colldata[ cmp ][ 41 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 22 ];
-	idct += colldata[ cmp ][ 43 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 23 ];
-	idct += colldata[ cmp ][  9 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 24 ];
-	idct += colldata[ cmp ][ 11 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 25 ];
-	idct += colldata[ cmp ][ 18 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 26 ];
-	idct += colldata[ cmp ][ 24 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 27 ];
-	idct += colldata[ cmp ][ 31 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 28 ];
-	idct += colldata[ cmp ][ 40 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 29 ];
-	idct += colldata[ cmp ][ 44 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 30 ];
-	idct += colldata[ cmp ][ 53 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 31 ];
-	idct += colldata[ cmp ][ 10 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 32 ];
-	idct += colldata[ cmp ][ 19 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 33 ];
-	idct += colldata[ cmp ][ 23 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 34 ];
-	idct += colldata[ cmp ][ 32 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 35 ];
-	idct += colldata[ cmp ][ 39 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 36 ];
-	idct += colldata[ cmp ][ 45 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 37 ];
-	idct += colldata[ cmp ][ 52 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 38 ];
-	idct += colldata[ cmp ][ 54 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 39 ];
-	idct += colldata[ cmp ][ 20 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 40 ];
-	idct += colldata[ cmp ][ 22 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 41 ];
-	idct += colldata[ cmp ][ 33 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 42 ];
-	idct += colldata[ cmp ][ 38 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 43 ];
-	idct += colldata[ cmp ][ 46 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 44 ];
-	idct += colldata[ cmp ][ 51 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 45 ];
-	idct += colldata[ cmp ][ 55 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 46 ];
-	idct += colldata[ cmp ][ 60 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 47 ];
-	idct += colldata[ cmp ][ 21 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 48 ];
-	idct += colldata[ cmp ][ 34 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 49 ];
-	idct += colldata[ cmp ][ 37 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 50 ];
-	idct += colldata[ cmp ][ 47 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 51 ];
-	idct += colldata[ cmp ][ 50 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 52 ];
-	idct += colldata[ cmp ][ 56 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 53 ];
-	idct += colldata[ cmp ][ 59 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 54 ];
-	idct += colldata[ cmp ][ 61 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 55 ];
-	idct += colldata[ cmp ][ 35 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 56 ];
-	idct += colldata[ cmp ][ 36 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 57 ];
-	idct += colldata[ cmp ][ 48 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 58 ];
-	idct += colldata[ cmp ][ 49 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 59 ];
-	idct += colldata[ cmp ][ 57 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 60 ];
-	idct += colldata[ cmp ][ 58 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 61 ];
-	idct += colldata[ cmp ][ 62 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 62 ];
-	idct += colldata[ cmp ][ 63 ][ dpos ] * adpt_idct_8x8[ cmp ][ ixy + 63 ];
-	
+	for(i=0; i<64; i++)
+	{
+		idct += cache[ i ] * adpt_idct_8x8[ cmp ][ ixy+i ];
+	}
 	
 	return idct;
 }
@@ -7352,15 +7356,17 @@ INTERN bool packJPG::dump_pgm( void )
 			return false;
 		}
 		
-		for ( dpos = 0; dpos < cmpnfo[cmp].bc; dpos++ )	{	
+		for ( dpos = 0; dpos < cmpnfo[cmp].bc; dpos++ )	{
+			int idct_2d_8x8_cache[64];
 			// do inverse DCT, store in imgdata
 			dcpos  = ( ( ( dpos / cmpnfo[cmp].bch ) * cmpnfo[cmp].bch ) << 6 ) +
 					   ( ( dpos % cmpnfo[cmp].bch ) << 3 );
+			idct_2d_fst_8x8_cache( cmp, dpos, idct_2d_8x8_cache );
 			for ( y = 0; y < 8; y++ ) {
 				ypos = dcpos + ( y * ( cmpnfo[cmp].bch << 3 ) );
 				for ( x = 0; x < 8; x++ ) {
 					xpos = ypos + x;
-					pix_v = idct_2d_fst_8x8( cmp, dpos, x, y );
+					pix_v = idct_2d_fst_8x8_cached( idct_2d_8x8_cache, cmp, x, y );
 					pix_v = DCT_RESCALE( pix_v );
 					pix_v = pix_v + 128;
 					imgdata[ xpos ] = ( unsigned char ) CLAMPED( 0, 255, pix_v );
