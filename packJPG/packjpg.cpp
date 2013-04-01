@@ -265,6 +265,8 @@ packJPG by Matthias Stirner, 02/2013
 #include "pjpgtbl.h"
 #include "dct8x8.h"
 
+#include "../libyuv/include/libyuv.h"
+
 #if defined BUILD_DLL // define BUILD_LIB from the compiler options if you want to compile a DLL!
 	#define BUILD_LIB
 #endif
@@ -519,6 +521,7 @@ INTERN bool dump_errfile( void );
 INTERN bool dump_info( void );
 INTERN bool dump_dist( void );
 INTERN bool dump_pgm( void );
+INTERN bool dump_bmp( void );
 #endif
 
 
@@ -1380,6 +1383,9 @@ INTERN void packJPG::initialize_options( int argc, char** argv )
 		else if ( strcmp((*argv), "-pgm") == 0 ) {
 			action = A_PGM_DUMP;
 		}
+		else if ( strcmp((*argv), "-bmp") == 0 ) {
+			action = A_BMP_DUMP;
+		}
 	   	else if ( ( strcmp((*argv), "-comp") == 0) ) {
 			action = A_COMPRESS;
 		}
@@ -1474,6 +1480,7 @@ INTERN void packJPG::process_ui( void )
 			case A_TXT_INFO:	actionmsg = "Extracting info"; break;		
 			case A_DIST_INFO:	actionmsg = "Extracting distributions";	break;		
 			case A_PGM_DUMP:	actionmsg = "Converting"; break;
+			case A_BMP_DUMP:	actionmsg = "Converting"; break;
 		}
 		
 		if ( verbosity < 2 ) fprintf( msgout, "%s -> ", actionmsg );
@@ -1636,6 +1643,8 @@ INTERN inline const char* packJPG::get_status( bool (packJPG::*function)() )
 		return "Writing distributions to files";
 	} else if ( function == &packJPG::dump_pgm ) {
 		return "Writing converted image to pgm";
+	} else if ( function == &packJPG::dump_bmp ) {
+		return "Writing converted image to bmp";
 	}
 	#endif
 	else {
@@ -1682,6 +1691,7 @@ INTERN void packJPG::show_help( void )
 	fprintf( msgout, " [-info]  write debug info to .nfo file\n" );	
 	fprintf( msgout, " [-dist]  write distribution data to file\n" );
 	fprintf( msgout, " [-pgm]   convert and write to pgm files\n" );
+	fprintf( msgout, " [-bmp]   convert and write to bmp file\n" );
 	}
 	#endif
 	fprintf( msgout, "\n" );
@@ -1773,6 +1783,12 @@ INTERN void packJPG::process_file( void )
 				execute( &packJPG::adapt_icos );
 				execute( &packJPG::dump_pgm );
 				break;
+			case A_BMP_DUMP:
+				execute( &packJPG::read_jpeg );
+				execute( &packJPG::decode_jpeg );
+				execute( &packJPG::adapt_icos );
+				execute( &packJPG::dump_bmp );
+				break;
 			#else
 			default:
 				break;
@@ -1846,6 +1862,12 @@ INTERN void packJPG::process_file( void )
 				execute( &packJPG::adapt_icos );
 				execute( &packJPG::unpredict_dc );
 				execute( &packJPG::dump_pgm );
+				break;
+			case A_BMP_DUMP:
+				execute( &packJPG::unpack_pjg );
+				execute( &packJPG::adapt_icos );
+				execute( &packJPG::unpredict_dc );
+				execute( &packJPG::dump_bmp );
 				break;
 			#else
 			default:
@@ -6540,6 +6562,7 @@ INTERN void packJPG::idct_2d_fst_8x8_cache( int cmp, int dpos, int cache[64] )
 	cache[62] = colldata[ cmp ][ 62 ][ dpos ];
 	cache[63] = colldata[ cmp ][ 63 ][ dpos ];
 }
+// cache only contains signed short values
 INTERN int packJPG::idct_2d_fst_8x8_cached( int cache[64], int cmp, int ix, int iy )
 {
 	int idct = 0;
@@ -7349,7 +7372,7 @@ INTERN bool packJPG::dump_pgm( void )
 		free( fn );
 		
 		// alloc memory for image data
-		imgdata = (unsigned char*) calloc ( cmpnfo[cmp].bc * 64, sizeof( char ) );
+		imgdata = (unsigned char*) calloc ( cmpnfo[cmp].bc * 64, sizeof( char ) ); // malloc() should be fine here?
 		if ( imgdata == NULL ) {
 			sprintf( errormessage, MEM_ERRMSG );
 			errorlevel = 2;
@@ -7391,6 +7414,224 @@ INTERN bool packJPG::dump_pgm( void )
 		fclose( fp );
 	}
 	
+	return true;
+}
+#pragma pack(push)  /* push current alignment to stack */
+#pragma pack(1)     /* set alignment to 1 byte boundary */
+typedef struct {
+	// TODO: use proper types
+	// BMP header
+	unsigned short magic; // "BM"
+	unsigned int size;
+	int reserved; // set to 0
+	unsigned int offset; // 54
+	// DIB header
+	unsigned int dibSize; // 40
+	int width;
+	int height;
+	unsigned short planes; // 1
+	unsigned short bpp;
+	int compression; // 0
+	unsigned int imageSize;
+	unsigned int hres; // 2835
+	unsigned int vres; // 2835
+	unsigned int paletteSize;
+	unsigned int importantCols; // 0
+	
+} /*__attribute__((__packed__))*/ bmp_header;
+#pragma pack(pop)   /* restore original alignment from stack */
+INTERN bool packJPG::dump_bmp( void )
+{
+	unsigned char* imgdata;
+	
+	FILE* fp;
+	char* fn;
+	
+	int cmp, dpos;
+	int pix_v;
+	int xpos, ypos, dcpos;
+	int x, y;
+	int blocks, cpos;
+	unsigned char* imgpos[4];
+	
+	// the first component (usually Y) should be the largest
+	blocks = 0;
+	for ( cmp = 0; cmp < cmpc; cmp++ ) {
+		if(cmpnfo[cmp].bc > cmpnfo[0].bc) {
+			sprintf( errormessage, "Invalid block count for component %d", cmp );
+			errorlevel = 2;
+			return false;
+		}
+		if(cmpnfo[cmp].bch > cmpnfo[0].bch || cmpnfo[cmp].bcv > cmpnfo[0].bcv) {
+			sprintf( errormessage, "Invalid dimensions for component %d", cmp );
+			errorlevel = 2;
+			return false;
+		}
+		blocks += cmpnfo[cmp].bc;
+	}
+	
+	// alloc memory for image data
+	imgdata = (unsigned char*) malloc ( blocks * 64 * sizeof( char ) );
+	if ( imgdata == NULL ) {
+		sprintf( errormessage, MEM_ERRMSG );
+		errorlevel = 2;
+		return false;
+	}
+	
+	cpos = 0;
+	for ( cmp = 0; cmp < cmpc; cmp++ )
+	{
+		imgpos[cmp] = imgdata + cpos;
+		for ( dpos = 0; dpos < cmpnfo[cmp].bc; dpos++ )	{
+			int idct_2d_8x8_cache[64];
+			// do inverse DCT, store in imgdata
+			dcpos  = ( ( ( dpos / cmpnfo[cmp].bch ) * cmpnfo[cmp].bch ) << 6 ) +
+					   ( ( dpos % cmpnfo[cmp].bch ) << 3 );
+			idct_2d_fst_8x8_cache( cmp, dpos, idct_2d_8x8_cache );
+			for ( y = 0; y < 8; y++ ) {
+				ypos = dcpos + ( y * ( cmpnfo[cmp].bch << 3 ) );
+				for ( x = 0; x < 8; x++ ) {
+					xpos = ypos + x;
+					pix_v = idct_2d_fst_8x8_cached( idct_2d_8x8_cache, cmp, x, y );
+					pix_v = DCT_RESCALE( pix_v );
+					pix_v = pix_v + 128;
+					imgdata[ cpos+xpos ] = ( unsigned char ) CLAMPED( 0, 255, pix_v );
+				}
+			}
+		}
+		cpos += cmpnfo[cmp].bc *64;
+	}
+	
+	// alloc memory for image data
+	unsigned char* rgbadata = (unsigned char*) malloc ( cmpnfo[0].bch * cmpnfo[0].bcv * 64 * 4 * sizeof( char ) );
+	if ( rgbadata == NULL ) {
+		sprintf( errormessage, MEM_ERRMSG );
+		errorlevel = 2;
+		return false;
+	}
+	
+	// convert to RGB + upsample if necessary
+	switch(cmpc) {
+		case 1:
+			// grayscale image
+			libyuv::I400ToARGB(imgdata, cmpnfo[0].bch*8,
+			                   rgbadata, cmpnfo[0].bch*8*4,
+			                   cmpnfo[0].bch*8, cmpnfo[0].bcv*8);
+		break;
+		case 3:
+			// yuv or rgb
+			// TODO: detection
+			if(1) {
+				// YUV
+				// TODO: check YUV to RGB colour conversion type (TV/PC levels etc)
+				unsigned char* y=0, * u=0, * v=0;
+				// upscale if sizes are different
+				bool plane1scale = (cmpnfo[1].bch < cmpnfo[0].bch || cmpnfo[1].bcv < cmpnfo[0].bcv);
+				bool plane2scale = (cmpnfo[2].bch < cmpnfo[0].bch || cmpnfo[2].bcv < cmpnfo[0].bcv);
+				if(plane1scale || plane2scale) {
+					// special case for 420
+					if(cmpnfo[1].bch == cmpnfo[2].bch && cmpnfo[1].bcv == cmpnfo[2].bcv && cmpnfo[1].bch*2 == cmpnfo[0].bch && cmpnfo[1].bcv*2 == cmpnfo[0].bcv) {
+						y = (unsigned char*)malloc(cmpnfo[0].bc*64 * sizeof( char ));
+						u = (unsigned char*)malloc(cmpnfo[0].bc*64 * sizeof( char ));
+						v = (unsigned char*)malloc(cmpnfo[0].bc*64 * sizeof( char ));
+						
+						libyuv::I420ToI444(
+							imgpos[0], cmpnfo[0].bch*8,
+							imgpos[1], cmpnfo[1].bch*8,
+							imgpos[2], cmpnfo[2].bch*8,
+							y, cmpnfo[0].bch*8,
+							u, cmpnfo[0].bch*8,
+							v, cmpnfo[0].bch*8,
+							cmpnfo[0].bch*8, cmpnfo[0].bcv*8
+						);
+					} else {
+						// scale them seperately
+						if(plane1scale) {
+							u = (unsigned char*)malloc(cmpnfo[0].bc*64 * sizeof( char ));
+							libyuv::ScalePlane(
+								imgpos[1], cmpnfo[1].bch*8,
+								cmpnfo[1].bch*8, cmpnfo[1].bcv*8,
+								u, cmpnfo[0].bch*8,
+								cmpnfo[0].bch*8, cmpnfo[0].bcv*8, libyuv::kFilterBilinear
+							);
+						}
+						if(plane2scale) {
+							v = (unsigned char*)malloc(cmpnfo[0].bc*64 * sizeof( char ));
+							libyuv::ScalePlane(
+								imgpos[2], cmpnfo[2].bch*8,
+								cmpnfo[2].bch*8, cmpnfo[2].bcv*8,
+								v, cmpnfo[0].bch*8,
+								cmpnfo[0].bch*8, cmpnfo[0].bcv*8, libyuv::kFilterBilinear
+							);
+						}
+					}
+				}
+				libyuv::I444ToARGB(y ? y : imgdata, cmpnfo[0].bch*8,
+				                   u ? u : imgdata + cmpnfo[0].bc*64, cmpnfo[0].bch*8,
+				                   v ? v : imgdata + cmpnfo[0].bc*64*2, cmpnfo[0].bch*8,
+				                   rgbadata, cmpnfo[0].bch*8*4,
+				                   cmpnfo[0].bch*8, cmpnfo[0].bcv*8);
+				
+				if(y) free(y);
+				if(u) free(u);
+				if(v) free(v);
+			} else {
+				// RGB
+				// TODO: interleave pixels
+			}
+		break;
+		case 4:
+			// cmyk or ycck
+			// TODO: support
+		break;
+		default:
+			// error
+			free(imgdata);
+			free(rgbadata);
+			sprintf( errormessage, "Image contains %d color planes - don't know how to process!", cmpc );
+			errorlevel = 2;
+			return false;
+	}
+	
+	// free memory
+	free( imgdata );
+	
+	// create filename
+	fn = create_filename( filelist[ file_no ], "bmp" );
+	
+	// open file for output
+	fp = fopen( fn, "wb" );		
+	if ( fp == NULL ){
+		free(rgbadata);
+		sprintf( errormessage, FWR_ERRMSG, fn );
+		errorlevel = 2;
+		return false;
+	}
+	free( fn );
+	
+	bmp_header h;
+	h.magic = 0x4D42;
+	// TODO: un-pad macroblocks??
+	h.imageSize = cmpnfo[0].bc * 64 * 4 * sizeof( char );
+	h.size = sizeof(h) + h.imageSize;
+	h.reserved = 0;
+	h.offset = sizeof(h);
+	h.dibSize = 40;
+	// TODO: un-pad macroblocks??
+	h.width = cmpnfo[0].bch*8;
+	h.height = -cmpnfo[0].bcv*8; // negate to store right way up
+	h.planes = 1;
+	h.bpp = 32;
+	h.compression = 0;
+	h.hres = 2835;
+	h.vres = 2835;
+	h.paletteSize = 0;
+	h.importantCols = 0;
+	fwrite(&h, sizeof(h), 1, fp);
+	fwrite(rgbadata, sizeof(char), cmpnfo[0].bch * cmpnfo[0].bcv * 64 * 4, fp);
+	// close file
+	fclose( fp );
+	free(rgbadata);
 	return true;
 }
 #endif
