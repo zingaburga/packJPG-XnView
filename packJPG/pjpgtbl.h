@@ -4,6 +4,7 @@
 
 // action defines
 #define A_COMPRESS			1
+#define A_DECODE			10
 #define A_SPLIT_DUMP		2
 #define A_COLL_DUMP			3
 #define A_FCOLL_DUMP		4

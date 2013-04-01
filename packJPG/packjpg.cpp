@@ -394,6 +394,7 @@ INTERN bool check_value_range( void );
 INTERN bool calc_zdst_lists( void );
 INTERN bool pack_pjg( void );
 INTERN bool unpack_pjg( void );
+INTERN bool decode_to_argb( void );
 
 
 /* -----------------------------------------------
@@ -469,10 +470,10 @@ INTERN void get_context_nnb( int pos, int w, int *a, int *b );
 	function declarations: DCT
 	----------------------------------------------- */
 
-#if !defined(BUILD_LIB) && defined(DEV_BUILD)
+//#if !defined(BUILD_LIB) && defined(DEV_BUILD)
 INTERN void idct_2d_fst_8x8_cache( int cmp, int dpos, int cache[64] );
 INTERN int idct_2d_fst_8x8_cached( int cache[64], int cmp, int ix, int iy );
-#endif
+//#endif
 INTERN int idct_2d_fst_1x8( int cmp, int dpos, int ix, int iy );
 INTERN int idct_2d_fst_8x1( int cmp, int dpos, int ix, int iy );
 
@@ -521,7 +522,7 @@ INTERN bool dump_errfile( void );
 INTERN bool dump_info( void );
 INTERN bool dump_dist( void );
 INTERN bool dump_pgm( void );
-INTERN bool dump_bmp( void );
+INTERN bool dump_bmp_header( void );
 #endif
 
 
@@ -691,6 +692,7 @@ packJPG(void);
 bool pjglib_convert_stream2stream( char* msg );
 bool pjglib_convert_file2file( char* in, char* out, char* msg );
 bool pjglib_convert_stream2mem( unsigned char** out_file, unsigned int* out_size, char* msg );
+bool pjglib_decode_stream2mem( unsigned char** out_file, unsigned int* out_size, char* msg );
 void pjglib_init_streams( void* in_src, int in_type, int in_size, void* out_dest, int out_type );
 #else
 int main( int argc, char** argv );
@@ -1133,6 +1135,61 @@ EXPORT bool packJPG::pjglib_convert_stream2mem( unsigned char** out_file, unsign
 }
 #endif
 
+/* -----------------------------------------------
+	DLL export converter function
+	----------------------------------------------- */
+	
+#if defined(BUILD_LIB)
+EXPORT bool packJPG::pjglib_decode_stream2mem( unsigned char** out_file, unsigned int* out_size, char* msg )
+{
+	clock_t begin, end;
+	int total;
+	
+	// use automatic settings
+	auto_set = true;
+	
+	// (re)set buffers
+	reset_buffers();
+	action = A_DECODE;
+	
+	// main compression / decompression routines
+	begin = clock();
+	
+	// process one file
+	process_file();
+	
+	// fetch pointer and size of output (only for memory output)
+	if ( ( errorlevel < err_tol ) && ( lib_out_type == 1 ) &&
+		 ( out_file != NULL ) && ( out_size != NULL ) ) {
+		*out_size = str_out->getsize();
+		*out_file = str_out->getptr();
+	}
+	
+	// close iostreams
+	if ( str_in  != NULL ) delete( str_in  ); str_in  = NULL;
+	if ( str_out != NULL ) delete( str_out ); str_out = NULL;
+	
+	end = clock();
+	
+	// copy errormessage / remove files if error (and output is file)
+	if ( errorlevel >= err_tol ) {
+		if ( lib_out_type == 0 ) {
+			// TODO: remove files here
+		}
+		if ( msg != NULL ) strcpy( msg, errormessage );
+		return false;
+	}
+	
+	// get timing info
+	if ( msg != NULL ) {
+		total = (int) ( (double) (( end - begin ) * 1000) / CLOCKS_PER_SEC );
+		sprintf( msg, "Decoded input in %ims", ( total >= 0 ) ? total : -1 );
+	}
+	
+	return true;
+}
+#endif
+
 
 /* -----------------------------------------------
 	DLL export init input (file/mem)
@@ -1473,6 +1530,7 @@ INTERN void packJPG::process_ui( void )
 		if ( filetype == F_UNK ) actionmsg = "unknown filetype";
 		else switch ( action ) {
 			case A_COMPRESS:	actionmsg = ( filetype == F_JPG ) ? "Compressing" : "Decompressing";	break;			
+			case A_DECODE:	actionmsg = "Decoding";	break;			
 			case A_SPLIT_DUMP:	actionmsg = "Splitting"; break;			
 			case A_COLL_DUMP:	actionmsg = "Extracting Colls"; break;
 			case A_FCOLL_DUMP:	actionmsg = "Extracting FColls"; break;
@@ -1619,6 +1677,8 @@ INTERN inline const char* packJPG::get_status( bool (packJPG::*function)() )
 		return "Compressing data to PJG";
 	} else if ( function == &packJPG::unpack_pjg ) {
 		return "Uncompressing data from PJG";
+	} else if ( function == &packJPG::decode_to_argb ) {
+		return "Decoding to ARGB";
 	} else if ( function == &packJPG::swap_streams ) {
 		return "Swapping input/output streams";
 	} else if ( function == &packJPG::compare_output ) {
@@ -1643,7 +1703,7 @@ INTERN inline const char* packJPG::get_status( bool (packJPG::*function)() )
 		return "Writing distributions to files";
 	} else if ( function == &packJPG::dump_pgm ) {
 		return "Writing converted image to pgm";
-	} else if ( function == &packJPG::dump_bmp ) {
+	} else if ( function == &packJPG::dump_bmp_header ) {
 		return "Writing converted image to bmp";
 	}
 	#endif
@@ -1731,6 +1791,13 @@ INTERN void packJPG::process_file( void )
 				#endif
 				break;
 				
+			case A_DECODE:
+				execute( &packJPG::read_jpeg );
+				execute( &packJPG::decode_jpeg );
+				execute( &packJPG::adapt_icos );
+				execute( &packJPG::decode_to_argb );
+				break;
+			
 			#if !defined(BUILD_LIB) && defined(DEV_BUILD)
 			case A_SPLIT_DUMP:
 				execute( &packJPG::read_jpeg );
@@ -1787,7 +1854,8 @@ INTERN void packJPG::process_file( void )
 				execute( &packJPG::read_jpeg );
 				execute( &packJPG::decode_jpeg );
 				execute( &packJPG::adapt_icos );
-				execute( &packJPG::dump_bmp );
+				execute( &packJPG::dump_bmp_header );
+				execute( &packJPG::decode_to_argb );
 				break;
 			#else
 			default:
@@ -1820,6 +1888,13 @@ INTERN void packJPG::process_file( void )
 				#endif
 				break;
 				
+			case A_DECODE:
+				execute( &packJPG::unpack_pjg );
+				execute( &packJPG::adapt_icos );
+				execute( &packJPG::unpredict_dc );
+				execute( &packJPG::decode_to_argb );
+				break;
+			
 			#if !defined(BUILD_LIB) && defined(DEV_BUILD)
 			case A_SPLIT_DUMP:
 				execute( &packJPG::unpack_pjg );
@@ -1867,7 +1942,8 @@ INTERN void packJPG::process_file( void )
 				execute( &packJPG::unpack_pjg );
 				execute( &packJPG::adapt_icos );
 				execute( &packJPG::unpredict_dc );
-				execute( &packJPG::dump_bmp );
+				execute( &packJPG::dump_bmp_header );
+				execute( &packJPG::decode_to_argb );
 				break;
 			#else
 			default:
@@ -3641,6 +3717,175 @@ INTERN bool packJPG::unpack_pjg( void )
 	return true;
 }
 
+/* -----------------------------------------------
+	decode to ARGB
+	----------------------------------------------- */
+	
+INTERN bool packJPG::decode_to_argb( void )
+{
+	unsigned char* imgdata;
+	
+	int cmp, dpos;
+	int pix_v;
+	int xpos, ypos, dcpos;
+	int x, y;
+	int blocks, cpos;
+	unsigned char* imgpos[4];
+	
+	// the first component (usually Y) should be the largest
+	blocks = 0;
+	for ( cmp = 0; cmp < cmpc; cmp++ ) {
+		if(cmpnfo[cmp].bc > cmpnfo[0].bc) {
+			sprintf( errormessage, "Invalid block count for component %d", cmp );
+			errorlevel = 2;
+			return false;
+		}
+		if(cmpnfo[cmp].bch > cmpnfo[0].bch || cmpnfo[cmp].bcv > cmpnfo[0].bcv) {
+			sprintf( errormessage, "Invalid dimensions for component %d", cmp );
+			errorlevel = 2;
+			return false;
+		}
+		blocks += cmpnfo[cmp].bc;
+	}
+	
+	// alloc memory for image data
+	imgdata = (unsigned char*) malloc ( blocks * 64 * sizeof( char ) );
+	if ( imgdata == NULL ) {
+		sprintf( errormessage, MEM_ERRMSG );
+		errorlevel = 2;
+		return false;
+	}
+	
+	cpos = 0;
+	for ( cmp = 0; cmp < cmpc; cmp++ )
+	{
+		imgpos[cmp] = imgdata + cpos;
+		for ( dpos = 0; dpos < cmpnfo[cmp].bc; dpos++ )	{
+			int idct_2d_8x8_cache[64];
+			// do inverse DCT, store in imgdata
+			dcpos  = ( ( ( dpos / cmpnfo[cmp].bch ) * cmpnfo[cmp].bch ) << 6 ) +
+					   ( ( dpos % cmpnfo[cmp].bch ) << 3 );
+			idct_2d_fst_8x8_cache( cmp, dpos, idct_2d_8x8_cache );
+			for ( y = 0; y < 8; y++ ) {
+				ypos = dcpos + ( y * ( cmpnfo[cmp].bch << 3 ) );
+				for ( x = 0; x < 8; x++ ) {
+					xpos = ypos + x;
+					pix_v = idct_2d_fst_8x8_cached( idct_2d_8x8_cache, cmp, x, y );
+					pix_v = DCT_RESCALE( pix_v );
+					pix_v = pix_v + 128;
+					imgdata[ cpos+xpos ] = ( unsigned char ) CLAMPED( 0, 255, pix_v );
+				}
+			}
+		}
+		cpos += cmpnfo[cmp].bc *64;
+	}
+	
+	// alloc memory for image data
+	int rgbasize = cmpnfo[0].bch * cmpnfo[0].bcv * 64 * 4 * sizeof( char );
+	unsigned char* rgbadata = (unsigned char*) malloc ( rgbasize );
+	if ( rgbadata == NULL ) {
+		sprintf( errormessage, MEM_ERRMSG );
+		errorlevel = 2;
+		return false;
+	}
+	
+	// convert to RGB + upsample if necessary
+	switch(cmpc) {
+		case 1:
+			// grayscale image
+			libyuv::I400ToARGB(imgdata, cmpnfo[0].bch*8,
+			                   rgbadata, cmpnfo[0].bch*8*4,
+			                   cmpnfo[0].bch*8, cmpnfo[0].bcv*8);
+		break;
+		case 3:
+			// yuv or rgb
+			// TODO: detection
+			if(1) {
+				// YUV
+				// TODO: check YUV to RGB colour conversion type (TV/PC levels etc)
+				unsigned char* y=0, * u=0, * v=0;
+				// upscale if sizes are different
+				bool plane1scale = (cmpnfo[1].bch < cmpnfo[0].bch || cmpnfo[1].bcv < cmpnfo[0].bcv);
+				bool plane2scale = (cmpnfo[2].bch < cmpnfo[0].bch || cmpnfo[2].bcv < cmpnfo[0].bcv);
+				if(plane1scale || plane2scale) {
+					// special case for 420
+					if(cmpnfo[1].bch == cmpnfo[2].bch && cmpnfo[1].bcv == cmpnfo[2].bcv && cmpnfo[1].bch*2 == cmpnfo[0].bch && cmpnfo[1].bcv*2 == cmpnfo[0].bcv) {
+						y = (unsigned char*)malloc(cmpnfo[0].bc*64 * sizeof( char ));
+						u = (unsigned char*)malloc(cmpnfo[0].bc*64 * sizeof( char ));
+						v = (unsigned char*)malloc(cmpnfo[0].bc*64 * sizeof( char ));
+						
+						libyuv::I420ToI444(
+							imgpos[0], cmpnfo[0].bch*8,
+							imgpos[1], cmpnfo[1].bch*8,
+							imgpos[2], cmpnfo[2].bch*8,
+							y, cmpnfo[0].bch*8,
+							u, cmpnfo[0].bch*8,
+							v, cmpnfo[0].bch*8,
+							cmpnfo[0].bch*8, cmpnfo[0].bcv*8
+						);
+					} else {
+						// scale them seperately
+						if(plane1scale) {
+							u = (unsigned char*)malloc(cmpnfo[0].bc*64 * sizeof( char ));
+							libyuv::ScalePlane(
+								imgpos[1], cmpnfo[1].bch*8,
+								cmpnfo[1].bch*8, cmpnfo[1].bcv*8,
+								u, cmpnfo[0].bch*8,
+								cmpnfo[0].bch*8, cmpnfo[0].bcv*8, libyuv::kFilterBilinear
+							);
+						}
+						if(plane2scale) {
+							v = (unsigned char*)malloc(cmpnfo[0].bc*64 * sizeof( char ));
+							libyuv::ScalePlane(
+								imgpos[2], cmpnfo[2].bch*8,
+								cmpnfo[2].bch*8, cmpnfo[2].bcv*8,
+								v, cmpnfo[0].bch*8,
+								cmpnfo[0].bch*8, cmpnfo[0].bcv*8, libyuv::kFilterBilinear
+							);
+						}
+					}
+				}
+				libyuv::I444ToARGB(y ? y : imgdata, cmpnfo[0].bch*8,
+				                   u ? u : imgdata + cmpnfo[0].bc*64, cmpnfo[0].bch*8,
+				                   v ? v : imgdata + cmpnfo[0].bc*64*2, cmpnfo[0].bch*8,
+				                   rgbadata, cmpnfo[0].bch*8*4,
+				                   cmpnfo[0].bch*8, cmpnfo[0].bcv*8);
+				
+				if(y) free(y);
+				if(u) free(u);
+				if(v) free(v);
+			} else {
+				// RGB
+				// TODO: interleave pixels
+			}
+		break;
+		case 4:
+			// cmyk or ycck
+			// TODO: support
+		break;
+		default:
+			// error
+			free(imgdata);
+			free(rgbadata);
+			sprintf( errormessage, "Image contains %d color planes - don't know how to process!", cmpc );
+			errorlevel = 2;
+			return false;
+	}
+	
+	// free memory
+	free( imgdata );
+	// write rgbadata to str_out
+	str_out->write(rgbadata, 1, rgbasize);
+	free( rgbadata );
+	
+	if ( str_out->chkerr() ) {
+		sprintf( errormessage, "write error, possibly drive is full" );
+		errorlevel = 2;		
+		return false;
+	}
+	
+	return true;
+}
 /* ----------------------- End of main functions -------------------------- */
 
 /* ----------------------- Begin of JPEG specific functions -------------------------- */
@@ -6494,7 +6739,7 @@ INTERN void packJPG::get_context_nnb( int pos, int w, int *a, int *b )
 /* -----------------------------------------------
 	inverse DCT transform using precalc tables (fast)
 	----------------------------------------------- */
-#if !defined(BUILD_LIB) && defined(DEV_BUILD)
+//#if !defined(BUILD_LIB) && defined(DEV_BUILD)
 INTERN void packJPG::idct_2d_fst_8x8_cache( int cmp, int dpos, int cache[64] )
 {
 	cache[ 0] = colldata[ cmp ][  0 ][ dpos ];
@@ -6577,7 +6822,7 @@ INTERN int packJPG::idct_2d_fst_8x8_cached( int cache[64], int cmp, int ix, int 
 	
 	return idct;
 }
-#endif
+//#endif
 
 
 /* -----------------------------------------------
@@ -7440,175 +7685,8 @@ typedef struct {
 	
 } /*__attribute__((__packed__))*/ bmp_header;
 #pragma pack(pop)   /* restore original alignment from stack */
-INTERN bool packJPG::dump_bmp( void )
+INTERN bool packJPG::dump_bmp_header( void )
 {
-	unsigned char* imgdata;
-	
-	FILE* fp;
-	char* fn;
-	
-	int cmp, dpos;
-	int pix_v;
-	int xpos, ypos, dcpos;
-	int x, y;
-	int blocks, cpos;
-	unsigned char* imgpos[4];
-	
-	// the first component (usually Y) should be the largest
-	blocks = 0;
-	for ( cmp = 0; cmp < cmpc; cmp++ ) {
-		if(cmpnfo[cmp].bc > cmpnfo[0].bc) {
-			sprintf( errormessage, "Invalid block count for component %d", cmp );
-			errorlevel = 2;
-			return false;
-		}
-		if(cmpnfo[cmp].bch > cmpnfo[0].bch || cmpnfo[cmp].bcv > cmpnfo[0].bcv) {
-			sprintf( errormessage, "Invalid dimensions for component %d", cmp );
-			errorlevel = 2;
-			return false;
-		}
-		blocks += cmpnfo[cmp].bc;
-	}
-	
-	// alloc memory for image data
-	imgdata = (unsigned char*) malloc ( blocks * 64 * sizeof( char ) );
-	if ( imgdata == NULL ) {
-		sprintf( errormessage, MEM_ERRMSG );
-		errorlevel = 2;
-		return false;
-	}
-	
-	cpos = 0;
-	for ( cmp = 0; cmp < cmpc; cmp++ )
-	{
-		imgpos[cmp] = imgdata + cpos;
-		for ( dpos = 0; dpos < cmpnfo[cmp].bc; dpos++ )	{
-			int idct_2d_8x8_cache[64];
-			// do inverse DCT, store in imgdata
-			dcpos  = ( ( ( dpos / cmpnfo[cmp].bch ) * cmpnfo[cmp].bch ) << 6 ) +
-					   ( ( dpos % cmpnfo[cmp].bch ) << 3 );
-			idct_2d_fst_8x8_cache( cmp, dpos, idct_2d_8x8_cache );
-			for ( y = 0; y < 8; y++ ) {
-				ypos = dcpos + ( y * ( cmpnfo[cmp].bch << 3 ) );
-				for ( x = 0; x < 8; x++ ) {
-					xpos = ypos + x;
-					pix_v = idct_2d_fst_8x8_cached( idct_2d_8x8_cache, cmp, x, y );
-					pix_v = DCT_RESCALE( pix_v );
-					pix_v = pix_v + 128;
-					imgdata[ cpos+xpos ] = ( unsigned char ) CLAMPED( 0, 255, pix_v );
-				}
-			}
-		}
-		cpos += cmpnfo[cmp].bc *64;
-	}
-	
-	// alloc memory for image data
-	unsigned char* rgbadata = (unsigned char*) malloc ( cmpnfo[0].bch * cmpnfo[0].bcv * 64 * 4 * sizeof( char ) );
-	if ( rgbadata == NULL ) {
-		sprintf( errormessage, MEM_ERRMSG );
-		errorlevel = 2;
-		return false;
-	}
-	
-	// convert to RGB + upsample if necessary
-	switch(cmpc) {
-		case 1:
-			// grayscale image
-			libyuv::I400ToARGB(imgdata, cmpnfo[0].bch*8,
-			                   rgbadata, cmpnfo[0].bch*8*4,
-			                   cmpnfo[0].bch*8, cmpnfo[0].bcv*8);
-		break;
-		case 3:
-			// yuv or rgb
-			// TODO: detection
-			if(1) {
-				// YUV
-				// TODO: check YUV to RGB colour conversion type (TV/PC levels etc)
-				unsigned char* y=0, * u=0, * v=0;
-				// upscale if sizes are different
-				bool plane1scale = (cmpnfo[1].bch < cmpnfo[0].bch || cmpnfo[1].bcv < cmpnfo[0].bcv);
-				bool plane2scale = (cmpnfo[2].bch < cmpnfo[0].bch || cmpnfo[2].bcv < cmpnfo[0].bcv);
-				if(plane1scale || plane2scale) {
-					// special case for 420
-					if(cmpnfo[1].bch == cmpnfo[2].bch && cmpnfo[1].bcv == cmpnfo[2].bcv && cmpnfo[1].bch*2 == cmpnfo[0].bch && cmpnfo[1].bcv*2 == cmpnfo[0].bcv) {
-						y = (unsigned char*)malloc(cmpnfo[0].bc*64 * sizeof( char ));
-						u = (unsigned char*)malloc(cmpnfo[0].bc*64 * sizeof( char ));
-						v = (unsigned char*)malloc(cmpnfo[0].bc*64 * sizeof( char ));
-						
-						libyuv::I420ToI444(
-							imgpos[0], cmpnfo[0].bch*8,
-							imgpos[1], cmpnfo[1].bch*8,
-							imgpos[2], cmpnfo[2].bch*8,
-							y, cmpnfo[0].bch*8,
-							u, cmpnfo[0].bch*8,
-							v, cmpnfo[0].bch*8,
-							cmpnfo[0].bch*8, cmpnfo[0].bcv*8
-						);
-					} else {
-						// scale them seperately
-						if(plane1scale) {
-							u = (unsigned char*)malloc(cmpnfo[0].bc*64 * sizeof( char ));
-							libyuv::ScalePlane(
-								imgpos[1], cmpnfo[1].bch*8,
-								cmpnfo[1].bch*8, cmpnfo[1].bcv*8,
-								u, cmpnfo[0].bch*8,
-								cmpnfo[0].bch*8, cmpnfo[0].bcv*8, libyuv::kFilterBilinear
-							);
-						}
-						if(plane2scale) {
-							v = (unsigned char*)malloc(cmpnfo[0].bc*64 * sizeof( char ));
-							libyuv::ScalePlane(
-								imgpos[2], cmpnfo[2].bch*8,
-								cmpnfo[2].bch*8, cmpnfo[2].bcv*8,
-								v, cmpnfo[0].bch*8,
-								cmpnfo[0].bch*8, cmpnfo[0].bcv*8, libyuv::kFilterBilinear
-							);
-						}
-					}
-				}
-				libyuv::I444ToARGB(y ? y : imgdata, cmpnfo[0].bch*8,
-				                   u ? u : imgdata + cmpnfo[0].bc*64, cmpnfo[0].bch*8,
-				                   v ? v : imgdata + cmpnfo[0].bc*64*2, cmpnfo[0].bch*8,
-				                   rgbadata, cmpnfo[0].bch*8*4,
-				                   cmpnfo[0].bch*8, cmpnfo[0].bcv*8);
-				
-				if(y) free(y);
-				if(u) free(u);
-				if(v) free(v);
-			} else {
-				// RGB
-				// TODO: interleave pixels
-			}
-		break;
-		case 4:
-			// cmyk or ycck
-			// TODO: support
-		break;
-		default:
-			// error
-			free(imgdata);
-			free(rgbadata);
-			sprintf( errormessage, "Image contains %d color planes - don't know how to process!", cmpc );
-			errorlevel = 2;
-			return false;
-	}
-	
-	// free memory
-	free( imgdata );
-	
-	// create filename
-	fn = create_filename( filelist[ file_no ], "bmp" );
-	
-	// open file for output
-	fp = fopen( fn, "wb" );		
-	if ( fp == NULL ){
-		free(rgbadata);
-		sprintf( errormessage, FWR_ERRMSG, fn );
-		errorlevel = 2;
-		return false;
-	}
-	free( fn );
-	
 	bmp_header h;
 	h.magic = 0x4D42;
 	// TODO: un-pad macroblocks??
@@ -7627,11 +7705,19 @@ INTERN bool packJPG::dump_bmp( void )
 	h.vres = 2835;
 	h.paletteSize = 0;
 	h.importantCols = 0;
-	fwrite(&h, sizeof(h), 1, fp);
-	fwrite(rgbadata, sizeof(char), cmpnfo[0].bch * cmpnfo[0].bcv * 64 * 4, fp);
-	// close file
-	fclose( fp );
-	free(rgbadata);
+	
+	// reopen str_out as the target BMP
+	char* fn = create_filename( filelist[ file_no ], "bmp" );
+	if ( str_out != NULL ) delete( str_out ); str_out = NULL;
+	str_out = new iostream( (void*) fn, ( !pipe_on ) ? 0 : 2, 0, 1 );
+	if ( str_out->chkerr() ) {
+		sprintf( errormessage, FWR_ERRMSG, fn );
+		errorlevel = 2;
+		return false;
+	}
+	free( fn );
+	
+	str_out->write(&h, sizeof(h), 1);
 	return true;
 }
 #endif
@@ -7665,6 +7751,9 @@ EXPORT bool pjglib_convert_file2file( void* p, char* in, char* out, char* msg ) 
 }
 EXPORT bool pjglib_convert_stream2mem( void* p, unsigned char** out_file, unsigned int* out_size, char* msg ) {
     return ((packJPG*)p)->pjglib_convert_stream2mem(out_file,out_size,msg);
+}
+EXPORT bool pjglib_decode_stream2mem( void* p, unsigned char** out_file, unsigned int* out_size, char* msg ) {
+    return ((packJPG*)p)->pjglib_decode_stream2mem(out_file,out_size,msg);
 }
 EXPORT void pjglib_init_streams( void* p, void* in_src, int in_type, int in_size, void* out_dest, int out_type ) {
     return ((packJPG*)p)->pjglib_init_streams(in_src,in_type,in_size,out_dest,out_type);
