@@ -12,6 +12,7 @@ DEPS    = bitops.h aricoder.h pjpgtbl.h dct8x8.h Makefile
 OBJ     = bitops.o aricoder.o packjpg.o
 RES     = icons.res
 BIN     = packJPG
+LIBYUV  = ../libyuv/libyuv.a
 
 %.o: %.cpp $(DEPS)
 	$(CPP) -c -o $@ $< $(CFLAGS)
@@ -19,8 +20,11 @@ BIN     = packJPG
 %.res: %.rc
 	$(RC) $< $@
 
-$(BIN): $(OBJ) $(RES)
+$(BIN): $(OBJ) $(RES) $(LIBYUV)
 	$(CPP) -o $@ $^ $(LDFLAGS)
+
+$(LIBYUV):
+	cd ../libyuv && make
 
 clean:
 	$(RM) *.o
