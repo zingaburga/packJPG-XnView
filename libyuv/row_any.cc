@@ -60,6 +60,9 @@ YANY(I422ToRAWRow_Any_SSSE3, I422ToRAWRow_SSSE3, I422ToRAWRow_C, 1, 3, 7)
 YANY(I422ToYUY2Row_Any_SSE2, I422ToYUY2Row_SSE2, I422ToYUY2Row_C, 1, 2, 15)
 YANY(I422ToUYVYRow_Any_SSE2, I422ToUYVYRow_SSE2, I422ToUYVYRow_C, 1, 2, 15)
 #endif  // HAS_I422TOARGBROW_SSSE3
+#ifdef HAS_I422TOARGBROW_AVX2
+YANY(I422ToARGBRow_Any_AVX2, I422ToARGBRow_AVX2, I422ToARGBRow_C, 1, 4, 15)
+#endif  // HAS_I422TOARGBROW_AVX2
 #ifdef HAS_I422TOARGBROW_NEON
 YANY(I444ToARGBRow_Any_NEON, I444ToARGBRow_NEON, I444ToARGBRow_C, 0, 4, 7)
 YANY(I422ToARGBRow_Any_NEON, I422ToARGBRow_NEON, I422ToARGBRow_C, 1, 4, 7)
@@ -134,8 +137,12 @@ RGBANY(ARGBToARGB1555Row_Any_SSE2, ARGBToARGB1555Row_SSE2, ARGBToARGB1555Row_C,
        3, 4, 2)
 RGBANY(ARGBToARGB4444Row_Any_SSE2, ARGBToARGB4444Row_SSE2, ARGBToARGB4444Row_C,
        3, 4, 2)
+#endif
+#if defined(HAS_I400TOARGBROW_SSE2)
 RGBANY(I400ToARGBRow_Any_SSE2, I400ToARGBRow_Unaligned_SSE2, I400ToARGBRow_C,
        7, 1, 4)
+#endif
+#if defined(HAS_YTOARGBROW_SSE2)
 RGBANY(YToARGBRow_Any_SSE2, YToARGBRow_SSE2, YToARGBRow_C,
        7, 1, 4)
 RGBANY(YUY2ToARGBRow_Any_SSSE3, YUY2ToARGBRow_Unaligned_SSSE3, YUY2ToARGBRow_C,
@@ -190,8 +197,17 @@ BAYERANY(ARGBToBayerRow_Any_SSSE3, ARGBToBayerRow_SSSE3, ARGBToBayerRow_C,
 #endif
 #if defined(HAS_ARGBTOBAYERROW_NEON)
 BAYERANY(ARGBToBayerRow_Any_NEON, ARGBToBayerRow_NEON, ARGBToBayerRow_C,
-         3, 4, 1)
+         7, 4, 1)
 #endif
+#if defined(HAS_ARGBTOBAYERGGROW_SSE2)
+BAYERANY(ARGBToBayerGGRow_Any_SSE2, ARGBToBayerGGRow_SSE2, ARGBToBayerGGRow_C,
+         7, 4, 1)
+#endif
+#if defined(HAS_ARGBTOBAYERGGROW_NEON)
+BAYERANY(ARGBToBayerGGRow_Any_NEON, ARGBToBayerGGRow_NEON, ARGBToBayerGGRow_C,
+         7, 4, 1)
+#endif
+
 #undef BAYERANY
 
 // RGB/YUV to Y does multiple of 16 with SIMD and last 16 with SIMD.
@@ -204,11 +220,14 @@ BAYERANY(ARGBToBayerRow_Any_NEON, ARGBToBayerRow_NEON, ARGBToBayerRow_C,
 
 #ifdef HAS_ARGBTOYROW_AVX2
 YANY(ARGBToYRow_Any_AVX2, ARGBToYRow_AVX2, 4, 1, 32)
+YANY(ARGBToYJRow_Any_AVX2, ARGBToYJRow_AVX2, 4, 1, 32)
 YANY(YUY2ToYRow_Any_AVX2, YUY2ToYRow_AVX2, 2, 1, 32)
 YANY(UYVYToYRow_Any_AVX2, UYVYToYRow_AVX2, 2, 1, 32)
 #endif
 #ifdef HAS_ARGBTOYROW_SSSE3
 YANY(ARGBToYRow_Any_SSSE3, ARGBToYRow_Unaligned_SSSE3, 4, 1, 16)
+#endif
+#ifdef HAS_BGRATOYROW_SSSE3
 YANY(BGRAToYRow_Any_SSSE3, BGRAToYRow_Unaligned_SSSE3, 4, 1, 16)
 YANY(ABGRToYRow_Any_SSSE3, ABGRToYRow_Unaligned_SSSE3, 4, 1, 16)
 YANY(RGBAToYRow_Any_SSSE3, RGBAToYRow_Unaligned_SSSE3, 4, 1, 16)
@@ -286,13 +305,15 @@ YANY(ARGBAttenuateRow_Any_NEON, ARGBAttenuateRow_NEON, ARGBAttenuateRow_C,
                 width & MASK);                                                 \
     }
 
-#ifdef HAS_ARGBTOYROW_AVX2
+#ifdef HAS_ARGBTOUVROW_AVX2
 UVANY(ARGBToUVRow_Any_AVX2, ARGBToUVRow_AVX2, ARGBToUVRow_C, 4, 31)
 UVANY(YUY2ToUVRow_Any_AVX2, YUY2ToUVRow_AVX2, YUY2ToUVRow_C, 2, 31)
 UVANY(UYVYToUVRow_Any_AVX2, UYVYToUVRow_AVX2, UYVYToUVRow_C, 2, 31)
 #endif
 #ifdef HAS_ARGBTOUVROW_SSSE3
 UVANY(ARGBToUVRow_Any_SSSE3, ARGBToUVRow_Unaligned_SSSE3, ARGBToUVRow_C, 4, 15)
+UVANY(ARGBToUVJRow_Any_SSSE3, ARGBToUVJRow_Unaligned_SSSE3, ARGBToUVJRow_C,
+      4, 15)
 UVANY(BGRAToUVRow_Any_SSSE3, BGRAToUVRow_Unaligned_SSSE3, BGRAToUVRow_C, 4, 15)
 UVANY(ABGRToUVRow_Any_SSSE3, ABGRToUVRow_Unaligned_SSSE3, ABGRToUVRow_C, 4, 15)
 UVANY(RGBAToUVRow_Any_SSSE3, RGBAToUVRow_Unaligned_SSSE3, RGBAToUVRow_C, 4, 15)
@@ -301,6 +322,7 @@ UVANY(UYVYToUVRow_Any_SSE2, UYVYToUVRow_Unaligned_SSE2, UYVYToUVRow_C, 2, 15)
 #endif
 #ifdef HAS_ARGBTOUVROW_NEON
 UVANY(ARGBToUVRow_Any_NEON, ARGBToUVRow_NEON, ARGBToUVRow_C, 4, 15)
+UVANY(ARGBToUVJRow_Any_NEON, ARGBToUVJRow_NEON, ARGBToUVJRow_C, 4, 15)
 UVANY(BGRAToUVRow_Any_NEON, BGRAToUVRow_NEON, BGRAToUVRow_C, 4, 15)
 UVANY(ABGRToUVRow_Any_NEON, ABGRToUVRow_NEON, ABGRToUVRow_C, 4, 15)
 UVANY(RGBAToUVRow_Any_NEON, RGBAToUVRow_NEON, RGBAToUVRow_C, 4, 15)
@@ -461,6 +483,10 @@ MATHROW_ANY(ARGBSubtractRow_Any_NEON, ARGBSubtractRow_NEON, ARGBSubtractRow_C,
                 dst_argb  + n * BPP, shuffler, width & MASK);                  \
     }
 
+#ifdef HAS_ARGBSHUFFLEROW_SSE2
+YANY(ARGBShuffleRow_Any_SSE2, ARGBShuffleRow_SSE2,
+     ARGBShuffleRow_C, 4, 4, 3)
+#endif
 #ifdef HAS_ARGBSHUFFLEROW_SSSE3
 YANY(ARGBShuffleRow_Any_SSSE3, ARGBShuffleRow_Unaligned_SSSE3,
      ARGBShuffleRow_C, 4, 4, 7)
@@ -474,6 +500,41 @@ YANY(ARGBShuffleRow_Any_NEON, ARGBShuffleRow_NEON,
      ARGBShuffleRow_C, 4, 4, 3)
 #endif
 #undef YANY
+
+// Interpolate may want to work in place, so last16 method can not be used.
+#define NANY(NAMEANY, TERP_SIMD, TERP_C, SBPP, BPP, MASK)                      \
+    void NAMEANY(uint8* dst_ptr, const uint8* src_ptr,                         \
+                 ptrdiff_t src_stride_ptr, int width,                          \
+                 int source_y_fraction) {                                      \
+      int n = width & ~MASK;                                                   \
+      TERP_SIMD(dst_ptr, src_ptr, src_stride_ptr,                              \
+                n, source_y_fraction);                                         \
+      TERP_C(dst_ptr + n * BPP,                                                \
+             src_ptr + n * SBPP, src_stride_ptr,                               \
+             width & MASK, source_y_fraction);                                 \
+    }
+
+#ifdef HAS_INTERPOLATEROW_AVX2
+NANY(InterpolateRow_Any_AVX2, InterpolateRow_AVX2,
+     InterpolateRow_C, 1, 1, 32)
+#endif
+#ifdef HAS_INTERPOLATEROW_SSSE3
+NANY(InterpolateRow_Any_SSSE3, InterpolateRow_Unaligned_SSSE3,
+     InterpolateRow_C, 1, 1, 15)
+#endif
+#ifdef HAS_INTERPOLATEROW_SSE2
+NANY(InterpolateRow_Any_SSE2, InterpolateRow_Unaligned_SSE2,
+     InterpolateRow_C, 1, 1, 15)
+#endif
+#ifdef HAS_INTERPOLATEROW_NEON
+NANY(InterpolateRow_Any_NEON, InterpolateRow_NEON,
+     InterpolateRow_C, 1, 1, 15)
+#endif
+#ifdef HAS_INTERPOLATEROW_MIPS_DSPR2
+NANY(InterpolateRow_Any_MIPS_DSPR2, InterpolateRow_MIPS_DSPR2,
+     InterpolateRow_C, 1, 1, 3)
+#endif
+#undef NANY
 
 #ifdef __cplusplus
 }  // extern "C"

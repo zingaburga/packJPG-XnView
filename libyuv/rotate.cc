@@ -41,7 +41,7 @@ extern "C" {
 #endif
 #endif
 
-#if !defined(LIBYUV_DISABLE_NEON) && \
+#if !defined(LIBYUV_DISABLE_NEON) && !defined(__native_client__) && \
     (defined(__ARM_NEON__) || defined(LIBYUV_NEON))
 #define HAS_MIRRORROW_NEON
 void MirrorRow_NEON(const uint8* src, uint8* dst, int width);
@@ -57,7 +57,8 @@ void TransposeUVWx8_NEON(const uint8* src, int src_stride,
                          int width);
 #endif  // defined(__ARM_NEON__)
 
-#if !defined(LIBYUV_DISABLE_MIPS) && defined(__mips__) && \
+#if !defined(LIBYUV_DISABLE_MIPS) && !defined(__native_client__) && \
+    defined(__mips__) && \
     defined(__mips_dsp) && (__mips_dsp_rev >= 2)
 #define HAS_TRANSPOSE_WX8_MIPS_DSPR2
 void TransposeWx8_MIPS_DSPR2(const uint8* src, int src_stride,
@@ -72,7 +73,8 @@ void TransposeUVWx8_MIPS_DSPR2(const uint8* src, int src_stride,
                                int width);
 #endif  // defined(__mips__)
 
-#if !defined(LIBYUV_DISABLE_X86) && defined(_M_IX86)
+#if !defined(LIBYUV_DISABLE_X86) && \
+    defined(_M_IX86) && defined(_MSC_VER)
 #define HAS_TRANSPOSE_WX8_SSSE3
 __declspec(naked) __declspec(align(16))
 static void TransposeWx8_SSSE3(const uint8* src, int src_stride,
@@ -294,7 +296,8 @@ static void TransposeUVWx8_SSE2(const uint8* src, int src_stride,
     ret
   }
 }
-#elif !defined(LIBYUV_DISABLE_X86) && (defined(__i386__) || defined(__x86_64__))
+#elif !defined(LIBYUV_DISABLE_X86) && \
+    (defined(__i386__) || (defined(__x86_64__) && !defined(__native_client__)))
 #define HAS_TRANSPOSE_WX8_SSSE3
 static void TransposeWx8_SSSE3(const uint8* src, int src_stride,
                                uint8* dst, int dst_stride, int width) {
@@ -383,7 +386,7 @@ static void TransposeWx8_SSSE3(const uint8* src, int src_stride,
   );
 }
 
-#if !defined(LIBYUV_DISABLE_X86) && defined (__i386__)
+#if !defined(LIBYUV_DISABLE_X86) && defined(__i386__)
 #define HAS_TRANSPOSE_UVWX8_SSE2
 extern "C" void TransposeUVWx8_SSE2(const uint8* src, int src_stride,
                                     uint8* dst_a, int dst_stride_a,
@@ -503,9 +506,16 @@ extern "C" void TransposeUVWx8_SSE2(const uint8* src, int src_stride,
     "pop    %edi                               \n"
     "pop    %esi                               \n"
     "pop    %ebx                               \n"
+#if defined(__native_client__)
+    "pop    %ecx                               \n"
+    "and    $0xffffffe0,%ecx                   \n"
+    "jmp    *%ecx                              \n"
+#else
     "ret                                       \n"
+#endif
 );
-#elif !defined(LIBYUV_DISABLE_X86) && defined(__x86_64__)
+#elif !defined(LIBYUV_DISABLE_X86) && !defined(__native_client__) && \
+    defined(__x86_64__)
 // 64 bit version has enough registers to do 16x8 to 8x16 at a time.
 #define HAS_TRANSPOSE_WX8_FAST_SSSE3
 static void TransposeWx8_FAST_SSSE3(const uint8* src, int src_stride,
@@ -882,9 +892,7 @@ void RotatePlane180(const uint8* src, int src_stride,
   }
 #endif
 #if defined(HAS_MIRRORROW_AVX2)
-  bool clear = false;
   if (TestCpuFlag(kCpuHasAVX2) && IS_ALIGNED(width, 32)) {
-    clear = true;
     MirrorRow = MirrorRow_AVX2;
   }
 #endif
@@ -913,10 +921,9 @@ void RotatePlane180(const uint8* src, int src_stride,
     CopyRow = CopyRow_SSE2;
   }
 #endif
-#if defined(HAS_COPYROW_AVX2)
-  // TODO(fbarchard): Detect Fast String support.
-  if (TestCpuFlag(kCpuHasAVX2)) {
-    CopyRow = CopyRow_AVX2;
+#if defined(HAS_COPYROW_ERMS)
+  if (TestCpuFlag(kCpuHasERMS)) {
+    CopyRow = CopyRow_ERMS;
   }
 #endif
 #if defined(HAS_COPYROW_MIPS)
@@ -942,11 +949,6 @@ void RotatePlane180(const uint8* src, int src_stride,
     src_bot -= src_stride;
     dst_bot -= dst_stride;
   }
-#if defined(HAS_MIRRORROW_AVX2)
-  if (clear) {
-    __asm vzeroupper;
-  }
-#endif
 }
 
 static void TransposeUVWx8_C(const uint8* src, int src_stride,
@@ -1095,6 +1097,50 @@ void RotateUV180(const uint8* src, int src_stride,
     dst_a -= dst_stride_a;
     dst_b -= dst_stride_b;
   }
+}
+
+LIBYUV_API
+int RotatePlane(const uint8* src, int src_stride,
+                uint8* dst, int dst_stride,
+                int width, int height,
+                RotationMode mode) {
+  if (!src || width <= 0 || height == 0 || !dst) {
+    return -1;
+  }
+
+  // Negative height means invert the image.
+  if (height < 0) {
+    height = -height;
+    src = src + (height - 1) * src_stride;
+    src_stride = -src_stride;
+  }
+
+  switch (mode) {
+    case kRotate0:
+      // copy frame
+      CopyPlane(src, src_stride,
+                dst, dst_stride,
+                width, height);
+      return 0;
+    case kRotate90:
+      RotatePlane90(src, src_stride,
+                    dst, dst_stride,
+                    width, height);
+      return 0;
+    case kRotate270:
+      RotatePlane270(src, src_stride,
+                     dst, dst_stride,
+                     width, height);
+      return 0;
+    case kRotate180:
+      RotatePlane180(src, src_stride,
+                     dst, dst_stride,
+                     width, height);
+      return 0;
+    default:
+      break;
+  }
+  return -1;
 }
 
 LIBYUV_API

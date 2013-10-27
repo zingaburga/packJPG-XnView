@@ -13,7 +13,7 @@
 
 #ifdef __cplusplus
 
-#include "basic_types.h"
+#include "libyuv/basic_types.h"
 
 // NOTE: For a simplified public API use convert.h MJPGToI420().
 
@@ -45,7 +45,7 @@ struct SetJmpErrorMgr;
 // MJPEG frames.
 //
 // See http://tools.ietf.org/html/rfc2435
-class MJpegDecoder {
+class LIBYUV_API MJpegDecoder {
  public:
   typedef void (*CallbackFunction)(void* opaque,
                                    const uint8* const* data,

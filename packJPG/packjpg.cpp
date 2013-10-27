@@ -268,7 +268,7 @@ packJPG by Matthias Stirner, 09/2013
 #include "pjpgtbl.h"
 #include "dct8x8.h"
 
-#include "../libyuv/include/libyuv.h"
+#include "libyuv.h"
 
 #if defined BUILD_DLL // define BUILD_LIB from the compiler options if you want to compile a DLL!
 	#define BUILD_LIB

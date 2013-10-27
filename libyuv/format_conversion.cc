@@ -32,7 +32,7 @@ static int MakeSelectors(const int blue_index,
                          const int green_index,
                          const int red_index,
                          uint32 dst_fourcc_bayer,
-                         uint32 *index_map) {
+                         uint32* index_map) {
   // Now build a lookup table containing the indices for the four pixels in each
   // 2x2 Bayer grid.
   switch (dst_fourcc_bayer) {
@@ -80,9 +80,9 @@ int ARGBToBayer(const uint8* src_argb, int src_stride_argb,
     }
   }
 #elif defined(HAS_ARGBTOBAYERROW_NEON)
-  if (TestCpuFlag(kCpuHasNEON) && width >= 4) {
+  if (TestCpuFlag(kCpuHasNEON) && width >= 8) {
     ARGBToBayerRow = ARGBToBayerRow_Any_NEON;
-    if (IS_ALIGNED(width, 4)) {
+    if (IS_ALIGNED(width, 8)) {
       ARGBToBayerRow = ARGBToBayerRow_NEON;
     }
   }
@@ -310,7 +310,7 @@ int BayerToI420(const uint8* src_bayer, int src_stride_bayer,
                       uint8* dst_u, uint8* dst_v, int width) = ARGBToUVRow_C;
   void (*ARGBToYRow)(const uint8* src_argb, uint8* dst_y, int pix) =
       ARGBToYRow_C;
-#if defined(HAS_ARGBTOYROW_SSSE3)
+#if defined(HAS_ARGBTOYROW_SSSE3) && defined(HAS_ARGBTOUVROW_SSSE3)
   if (TestCpuFlag(kCpuHasSSSE3) && width >= 16) {
     ARGBToUVRow = ARGBToUVRow_Any_SSSE3;
     ARGBToYRow = ARGBToYRow_Any_SSSE3;
@@ -387,6 +387,9 @@ int I420ToBayer(const uint8* src_y, int src_stride_y,
                 uint8* dst_bayer, int dst_stride_bayer,
                 int width, int height,
                 uint32 dst_fourcc_bayer) {
+  if (width * 4 > kMaxStride) {
+    return -1;  // Size too large for row buffer
+  }
   // Negative height means invert the image.
   if (height < 0) {
     height = -height;
@@ -410,14 +413,24 @@ int I420ToBayer(const uint8* src_y, int src_stride_y,
       I422ToARGBRow = I422ToARGBRow_SSSE3;
     }
   }
-#elif defined(HAS_I422TOARGBROW_NEON)
+#endif
+#if defined(HAS_I422TOARGBROW_AVX2)
+  if (TestCpuFlag(kCpuHasAVX2) && width >= 16) {
+    I422ToARGBRow = I422ToARGBRow_Any_AVX2;
+    if (IS_ALIGNED(width, 16)) {
+      I422ToARGBRow = I422ToARGBRow_AVX2;
+    }
+  }
+#endif
+#if defined(HAS_I422TOARGBROW_NEON)
   if (TestCpuFlag(kCpuHasNEON) && width >= 8) {
     I422ToARGBRow = I422ToARGBRow_Any_NEON;
     if (IS_ALIGNED(width, 8)) {
       I422ToARGBRow = I422ToARGBRow_NEON;
     }
   }
-#elif defined(HAS_I422TOARGBROW_MIPS_DSPR2)
+#endif
+#if defined(HAS_I422TOARGBROW_MIPS_DSPR2)
   if (TestCpuFlag(kCpuHasMIPS_DSPR2) && IS_ALIGNED(width, 4) &&
       IS_ALIGNED(src_y, 4) && IS_ALIGNED(src_stride_y, 4) &&
       IS_ALIGNED(src_u, 2) && IS_ALIGNED(src_stride_u, 2) &&
@@ -437,9 +450,9 @@ int I420ToBayer(const uint8* src_y, int src_stride_y,
     }
   }
 #elif defined(HAS_ARGBTOBAYERROW_NEON)
-  if (TestCpuFlag(kCpuHasNEON) && width >= 4) {
+  if (TestCpuFlag(kCpuHasNEON) && width >= 8) {
     ARGBToBayerRow = ARGBToBayerRow_Any_NEON;
-    if (IS_ALIGNED(width, 4)) {
+    if (IS_ALIGNED(width, 8)) {
       ARGBToBayerRow = ARGBToBayerRow_NEON;
     }
   }

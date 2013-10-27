@@ -22,14 +22,15 @@ extern "C" {
 
 // ARGBScale has a function to copy pixels to a row, striding each source
 // pixel by a constant.
-#if !defined(LIBYUV_DISABLE_X86) && (defined(_M_IX86) || \
-  defined(__x86_64__) || defined(__i386__))
+#if !defined(LIBYUV_DISABLE_X86) && \
+    (defined(_M_IX86) || \
+    (defined(__x86_64__) && !defined(__native_client__)) || defined(__i386__))
 #define HAS_SCALEARGBROWDOWNEVEN_SSE2
 void ScaleARGBRowDownEven_SSE2(const uint8* src_ptr, int src_stride,
                                int src_stepx,
                                uint8* dst_ptr, int dst_width);
 #endif
-#if !defined(LIBYUV_DISABLE_NEON) && \
+#if !defined(LIBYUV_DISABLE_NEON) && !defined(__native_client__) && \
     (defined(__ARM_NEON__) || defined(LIBYUV_NEON))
 #define HAS_SCALEARGBROWDOWNEVEN_NEON
 void ScaleARGBRowDownEven_NEON(const uint8* src_ptr, int src_stride,
@@ -101,9 +102,7 @@ void ARGBRotate180(const uint8* src, int src_stride,
   }
 #endif
 #if defined(HAS_ARGBMIRRORROW_AVX2)
-  bool clear = false;
   if (TestCpuFlag(kCpuHasAVX2) && IS_ALIGNED(width, 8)) {
-    clear = true;
     ARGBMirrorRow = ARGBMirrorRow_AVX2;
   }
 #endif
@@ -130,10 +129,9 @@ void ARGBRotate180(const uint8* src, int src_stride,
     CopyRow = CopyRow_SSE2;
   }
 #endif
-#if defined(HAS_COPYROW_AVX2)
-  // TODO(fbarchard): Detect Fast String support.
-  if (TestCpuFlag(kCpuHasAVX2)) {
-    CopyRow = CopyRow_AVX2;
+#if defined(HAS_COPYROW_ERMS)
+  if (TestCpuFlag(kCpuHasERMS)) {
+    CopyRow = CopyRow_ERMS;
   }
 #endif
 #if defined(HAS_COPYROW_MIPS)
@@ -141,9 +139,8 @@ void ARGBRotate180(const uint8* src, int src_stride,
     CopyRow = CopyRow_MIPS;
   }
 #endif
-  if (width * 4 > kMaxStride) {
-    return;
-  }
+  bool direct = width * 4 > kMaxStride;
+
   // Swap first and last row and mirror the content. Uses a temporary row.
   SIMD_ALIGNED(uint8 row[kMaxStride]);
   const uint8* src_bot = src + src_stride * (height - 1);
@@ -151,19 +148,21 @@ void ARGBRotate180(const uint8* src, int src_stride,
   int half_height = (height + 1) >> 1;
   // Odd height will harmlessly mirror the middle row twice.
   for (int y = 0; y < half_height; ++y) {
-    ARGBMirrorRow(src, row, width);  // Mirror first row into a buffer
+    if (direct) {
+      ARGBMirrorRow(src, dst_bot, width);  // Mirror first row into a buffer
+      if (src != src_bot) {
+        ARGBMirrorRow(src_bot, dst, width);  // Mirror last row into first row
+      }
+    } else {
+      ARGBMirrorRow(src, row, width);  // Mirror first row into a buffer
+      ARGBMirrorRow(src_bot, dst, width);  // Mirror last row into first row
+      CopyRow(row, dst_bot, width * 4);  // Copy first mirrored row into last
+    }
     src += src_stride;
-    ARGBMirrorRow(src_bot, dst, width);  // Mirror last row into first row
     dst += dst_stride;
-    CopyRow(row, dst_bot, width * 4);  // Copy first mirrored row into last
     src_bot -= src_stride;
     dst_bot -= dst_stride;
   }
-#if defined(HAS_ARGBMIRRORROW_AVX2)
-  if (clear) {
-    __asm vzeroupper;
-  }
-#endif
 }
 
 LIBYUV_API
