@@ -1,5 +1,5 @@
 /*
-packJPG v2.5f (02/24/2013)
+packJPG v2.5g (09/14/2013)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 packJPG is a compression program specially designed for further
@@ -222,6 +222,9 @@ v2.5e (07/03/12) (public)
  
 v2.5f (02/24/13) (public)
  - fixed a minor bug in the JPG parser (thanks to Stephan Busch)
+ 
+v2.5g (09/14/13) (public)
+ - fixed a rare crash bug with manipulated JPEG files
 
 
 Acknowledgements
@@ -251,7 +254,7 @@ For questions and bug reports:
 
 
 ____________________________________
-packJPG by Matthias Stirner, 02/2013
+packJPG by Matthias Stirner, 09/2013
 */
 
 #include <stdio.h>
@@ -285,8 +288,8 @@ packJPG by Matthias Stirner, 02/2013
 // #define DEV_INFOS // uncomment to include developer information
 
 #define QUANT(cm,bp)	( cmpnfo[cm].qtable[ bp ] )
-#define MAX_V(cm,bp)	( ( freqmax[bp] + QUANT(cm,bp) - 1 ) /  QUANT(cm,bp) )
-#define QUN_V(v,cm,bp)	( ( v > 0 ) ? ( v + (QUANT(cm,bp)/2) ) /  QUANT(cm,bp) : ( v - (QUANT(cm,bp)/2) ) /  QUANT(cm,bp) )
+#define MAX_V(cm,bp)	( ( QUANT(cm,bp) > 0 ) ? ( ( freqmax[bp] + QUANT(cm,bp) - 1 ) /  QUANT(cm,bp) ) : 0 )
+// #define QUN_V(v,cm,bp)	( ( QUANT(cm,bp) > 0 ) ? ( ( v > 0 ) ? ( v + (QUANT(cm,bp)/2) ) /  QUANT(cm,bp) : ( v - (QUANT(cm,bp)/2) ) /  QUANT(cm,bp) ) : 0 )
 
 #define ENVLI(s,v)		( ( v > 0 ) ? v : ( v - 1 ) + ( 1 << s ) )
 #define DEVLI(s,n)		( ( n >= ( 1 << (s - 1) ) ) ? n : n + 1 - ( 1 << s ) )
@@ -704,10 +707,10 @@ int main( int argc, char** argv );
 	----------------------------------------------- */
 
 INTERN const unsigned char appversion = 25;
-INTERN const char*  subversion   = "f";
+INTERN const char*  subversion   = "g";
 INTERN const char*  apptitle     = "packJPG";
 INTERN const char*  appname      = "packjpg";
-INTERN const char*  versiondate  = "02/24/2013";
+INTERN const char*  versiondate  = "09/14/2013";
 INTERN const char*  author       = "Matthias Stirner / Se";
 #if !defined(BUILD_LIB)
 INTERN const char*  website      = "http://www.elektronik.htw-aalen.de/packjpg/";
@@ -3435,10 +3438,9 @@ INTERN bool packJPG::check_value_range( void )
 	int absmax;
 	int cmp, bpos, dpos;
 	
-	
 	// out of range should never happen with unmodified JPEGs
 	for ( cmp = 0; cmp < cmpc; cmp++ )
-	for ( bpos = 0; bpos < 64; bpos++ ) {		
+	for ( bpos = 0; bpos < 64; bpos++ ) {
 		absmax = MAX_V( cmp, bpos );
 		for ( dpos = 0; dpos < cmpnfo[cmp].bc; dpos++ )
 		if ( ( colldata[cmp][bpos][dpos] > absmax ) ||
