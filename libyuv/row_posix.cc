@@ -2107,20 +2107,20 @@ void RGBAToUVRow_Unaligned_SSSE3(const uint8* src_rgba0, int src_stride_rgba,
 #endif  // HAS_ARGBTOUVROW_SSSE3
 
 #ifdef HAS_I422TOARGBROW_SSSE3
-#define UB 127 /* min(63,static_cast<int8>(2.018 * 64)) */
-#define UG -25 /* static_cast<int8>(-0.391 * 64 - 0.5) */
+#define UB 113 /* min(63,static_cast<int8>(1.774 * 64)) - this seems to be a bit off */
+#define UG -22 /* static_cast<int8>(-0.344 * 64 - 0.5) */
 #define UR 0
 
 #define VB 0
-#define VG -52 /* static_cast<int8>(-0.813 * 64 - 0.5) */
-#define VR 102 /* static_cast<int8>(1.596 * 64 + 0.5) */
+#define VG -46 /* static_cast<int8>(-0.714 * 64 - 0.5) */
+#define VR 90 /* static_cast<int8>(1.402 * 64 + 0.5) */
 
 // Bias
 #define BB UB * 128 + VB * 128
 #define BG UG * 128 + VG * 128
 #define BR UR * 128 + VR * 128
 
-#define YG 74 /* static_cast<int8>(1.164 * 64 + 0.5) */
+#define YG 64 /* static_cast<int8>(1 * 64 + 0.5) */
 
 struct {
   vec8 kUVToB;  // 0
@@ -2141,7 +2141,7 @@ struct {
   { BB, BB, BB, BB, BB, BB, BB, BB },
   { BG, BG, BG, BG, BG, BG, BG, BG },
   { BR, BR, BR, BR, BR, BR, BR, BR },
-  { 16, 16, 16, 16, 16, 16, 16, 16 },
+  { 0, 0, 0, 0, 0, 0, 0, 0 },
   { YG, YG, YG, YG, YG, YG, YG, YG },
   { VB, UB, VB, UB, VB, UB, VB, UB, VB, UB, VB, UB, VB, UB, VB, UB },
   { VG, UG, VG, UG, VG, UG, VG, UG, VG, UG, VG, UG, VG, UG, VG, UG },
@@ -2192,7 +2192,7 @@ struct {
     "movq       (%[y_buf]),%%xmm3              \n"                             \
     "lea        0x8(%[y_buf]),%[y_buf]         \n"                             \
     "punpcklbw  %%xmm4,%%xmm3                  \n"                             \
-    "psubsw     96(%[kYuvConstants]),%%xmm3    \n"                             \
+    /*"psubsw     96(%[kYuvConstants]),%%xmm3    \n" */                            \
     "pmullw     112(%[kYuvConstants]),%%xmm3   \n"                             \
     "paddsw     %%xmm3,%%xmm0                  \n"                             \
     "paddsw     %%xmm3,%%xmm1                  \n"                             \

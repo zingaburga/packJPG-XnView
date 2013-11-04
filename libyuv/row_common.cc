@@ -905,16 +905,16 @@ void I400ToARGBRow_C(const uint8* src_y, uint8* dst_argb, int width) {
 }
 
 // C reference code that mimics the YUV assembly.
+// changed for JPEG: https://en.wikipedia.org/wiki/YCbCr#JPEG_conversion
+#define YG 64 /* static_cast<int8>(1 * 64 + 0.5) */
 
-#define YG 74 /* static_cast<int8>(1.164 * 64 + 0.5) */
-
-#define UB 127 /* min(63,static_cast<int8>(2.018 * 64)) */
-#define UG -25 /* static_cast<int8>(-0.391 * 64 - 0.5) */
+#define UB 113 /* min(63,static_cast<int8>(1.772 * 64)) - this seems to be a bit off */
+#define UG -22 /* static_cast<int8>(-0.344 * 64 - 0.5) */
 #define UR 0
 
 #define VB 0
-#define VG -52 /* static_cast<int8>(-0.813 * 64 - 0.5) */
-#define VR 102 /* static_cast<int8>(1.596 * 64 + 0.5) */
+#define VG -46 /* static_cast<int8>(-0.714 * 64 - 0.5) */
+#define VR 90 /* static_cast<int8>(1.402 * 64 + 0.5) */
 
 // Bias
 #define BB UB * 128 + VB * 128
@@ -923,7 +923,7 @@ void I400ToARGBRow_C(const uint8* src_y, uint8* dst_argb, int width) {
 
 static __inline void YuvPixel(uint8 y, uint8 u, uint8 v,
                               uint8* b, uint8* g, uint8* r) {
-  int32 y1 = (static_cast<int32>(y) - 16) * YG;
+  int32 y1 = (static_cast<int32>(y)) * YG;
   *b = Clamp(static_cast<int32>((u * UB + v * VB) - (BB) + y1) >> 6);
   *g = Clamp(static_cast<int32>((u * UG + v * VG) - (BG) + y1) >> 6);
   *r = Clamp(static_cast<int32>((u * UR + v * VR) - (BR) + y1) >> 6);

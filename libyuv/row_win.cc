@@ -2030,15 +2030,15 @@ void RGBAToUVRow_Unaligned_SSSE3(const uint8* src_argb0, int src_stride_argb,
 }
 #endif  // HAS_ARGBTOYROW_SSSE3
 
-#define YG 74 /* static_cast<int8>(1.164 * 64 + 0.5) */
+#define YG 64 /* static_cast<int8>(1 * 64 + 0.5) */
 
-#define UB 127 /* min(63,static_cast<int8>(2.018 * 64)) */
-#define UG -25 /* static_cast<int8>(-0.391 * 64 - 0.5) */
+#define UB 113 /* min(63,static_cast<int8>(1.774 * 64)) - this seems to be a bit off */
+#define UG -22 /* static_cast<int8>(-0.344 * 64 - 0.5) */
 #define UR 0
 
 #define VB 0
-#define VG -52 /* static_cast<int8>(-0.813 * 64 - 0.5) */
-#define VR 102 /* static_cast<int8>(1.596 * 64 + 0.5) */
+#define VG -46 /* static_cast<int8>(-0.714 * 64 - 0.5) */
+#define VR 90 /* static_cast<int8>(1.402 * 64 + 0.5) */
 
 // Bias
 #define BB UB * 128 + VB * 128
@@ -2063,7 +2063,7 @@ static const lvec16 kYToRgb_AVX = {
   YG, YG, YG, YG, YG, YG, YG, YG, YG, YG, YG, YG, YG, YG, YG, YG
 };
 static const lvec16 kYSub16_AVX = {
-  16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 };
 static const lvec16 kUVBiasB_AVX = {
   BB, BB, BB, BB, BB, BB, BB, BB, BB, BB, BB, BB, BB, BB, BB, BB
@@ -2115,7 +2115,7 @@ void I422ToARGBRow_AVX2(const uint8* y_buf,
     lea        eax, [eax + 16]
     vpermq     ymm3, ymm3, 0xd8
     vpunpcklbw ymm3, ymm3, ymm4
-    vpsubsw    ymm3, ymm3, kYSub16_AVX
+    //vpsubsw    ymm3, ymm3, kYSub16_AVX
     vpmullw    ymm3, ymm3, kYToRgb_AVX
     vpaddsw    ymm2, ymm2, ymm3           // B += Y
     vpaddsw    ymm1, ymm1, ymm3           // G += Y
@@ -2175,7 +2175,7 @@ static const vec8 kVUToG = {
 };
 
 static const vec16 kYToRgb = { YG, YG, YG, YG, YG, YG, YG, YG };
-static const vec16 kYSub16 = { 16, 16, 16, 16, 16, 16, 16, 16 };
+static const vec16 kYSub16 = { 0, 0, 0, 0, 0, 0, 0, 0 };
 static const vec16 kUVBiasB = { BB, BB, BB, BB, BB, BB, BB, BB };
 static const vec16 kUVBiasG = { BG, BG, BG, BG, BG, BG, BG, BG };
 static const vec16 kUVBiasR = { BR, BR, BR, BR, BR, BR, BR, BR };
@@ -2233,7 +2233,7 @@ static const vec16 kUVBiasR = { BR, BR, BR, BR, BR, BR, BR, BR };
     __asm movq       xmm3, qword ptr [eax]                        /* NOLINT */ \
     __asm lea        eax, [eax + 8]                                            \
     __asm punpcklbw  xmm3, xmm4                                                \
-    __asm psubsw     xmm3, kYSub16                                             \
+    /*__asm psubsw     xmm3, kYSub16 */                                            \
     __asm pmullw     xmm3, kYToRgb                                             \
     __asm paddsw     xmm0, xmm3           /* B += Y */                         \
     __asm paddsw     xmm1, xmm3           /* G += Y */                         \
@@ -2261,7 +2261,7 @@ static const vec16 kUVBiasR = { BR, BR, BR, BR, BR, BR, BR, BR };
     __asm movq       xmm3, qword ptr [eax]                        /* NOLINT */ \
     __asm lea        eax, [eax + 8]                                            \
     __asm punpcklbw  xmm3, xmm4                                                \
-    __asm psubsw     xmm3, kYSub16                                             \
+    /*__asm psubsw     xmm3, kYSub16 */                                            \
     __asm pmullw     xmm3, kYToRgb                                             \
     __asm paddsw     xmm0, xmm3           /* B += Y */                         \
     __asm paddsw     xmm1, xmm3           /* G += Y */                         \
