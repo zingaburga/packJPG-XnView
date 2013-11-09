@@ -396,6 +396,10 @@ INTERN bool unpredict_dc( void );
 INTERN bool check_value_range( void );
 INTERN bool calc_zdst_lists( void );
 INTERN bool pack_pjg( void );
+INTERN aricoder* unpack_pjg_decoder;
+INTERN bool unpack_pjg_header_check( void );
+INTERN bool unpack_pjg_header( void );
+INTERN bool unpack_pjg_body( void );
 INTERN bool unpack_pjg( void );
 INTERN bool decode_to_argb( void );
 
@@ -696,6 +700,8 @@ bool pjglib_convert_stream2stream( char* msg );
 bool pjglib_convert_file2file( char* in, char* out, char* msg );
 bool pjglib_convert_stream2mem( unsigned char** out_file, unsigned int* out_size, char* msg );
 bool pjglib_decode_stream2mem( unsigned char** out_file, unsigned int* out_size, char* msg );
+bool pjglib_pjg_get_info( struct pjglib_pjg_info* info );
+bool pjglib_pjg_get_argb( unsigned char** out_file, unsigned int* out_size, char* msg );
 void pjglib_init_streams( void* in_src, int in_type, int in_size, void* out_dest, int out_type );
 #else
 int main( int argc, char** argv );
@@ -1192,6 +1198,70 @@ EXPORT bool packJPG::pjglib_decode_stream2mem( unsigned char** out_file, unsigne
 	return true;
 }
 #endif
+
+/* -----------------------------------------------
+	DLL export; our special packJPG handling functions
+	----------------------------------------------- */
+	
+#if defined(BUILD_LIB)
+EXPORT bool packJPG::pjglib_pjg_get_info( struct pjglib_pjg_info* info )
+{
+	// use automatic settings
+	auto_set = true;
+	
+	// (re)set buffers
+	reset_buffers();
+	
+	// process one file
+	// ( filetype == F_PJG ) should be true here
+	execute( &packJPG::unpack_pjg_header_check );
+	unpack_pjg_decoder = new aricoder( str_in, 0 );
+	execute( &packJPG::unpack_pjg_header );
+	
+	if ( errorlevel >= err_tol ) {
+		return false;
+	}
+	
+	// fill out info struct
+	info->width = imgwidth;
+	info->height = imgheight;
+	info->channels = cmpc;
+	// TODO: would be nice to return more about the colour info
+	
+	return true;
+}
+EXPORT bool packJPG::pjglib_pjg_get_argb( unsigned char** out_file, unsigned int* out_size, char* msg )
+{
+	execute( &packJPG::unpack_pjg_body );
+	delete( unpack_pjg_decoder );
+	execute( &packJPG::adapt_icos );
+	execute( &packJPG::unpredict_dc );
+	execute( &packJPG::decode_to_argb );
+	reset_buffers();
+	
+	
+	// fetch pointer and size of output (only for memory output)
+	if ( ( errorlevel < err_tol ) && ( lib_out_type == 1 ) &&
+		 ( out_file != NULL ) && ( out_size != NULL ) ) {
+		*out_size = str_out->getsize();
+		*out_file = str_out->getptr();
+	}
+	
+	// close iostreams
+	if ( str_in  != NULL ) delete( str_in  ); str_in  = NULL;
+	if ( str_out != NULL ) delete( str_out ); str_out = NULL;
+	
+	
+	// copy errormessage / remove files if error (and output is file)
+	if ( errorlevel >= err_tol ) {
+		if ( msg != NULL ) strcpy( msg, errormessage );
+		return false;
+	}
+	
+	return true;
+}
+#endif
+
 
 
 /* -----------------------------------------------
@@ -3629,12 +3699,9 @@ INTERN bool packJPG::pack_pjg( void )
 	unpacks compressed pjg to colldata
 	----------------------------------------------- */
 	
-INTERN bool packJPG::unpack_pjg( void )
+INTERN bool packJPG::unpack_pjg_header_check( void )
 {
-	aricoder* decoder;
 	unsigned char hcode;
-	unsigned char cb;
-	int cmp;
 	
 	
 	// check header codes ( maybe position in other function ? )
@@ -3662,10 +3729,13 @@ INTERN bool packJPG::unpack_pjg( void )
 			return false;
 		}
 	}
+	return true;
+}
+INTERN bool packJPG::unpack_pjg_header( void )
+{
+	unsigned char cb;
+	aricoder* decoder = unpack_pjg_decoder;
 	
-	
-	// init arithmetic compression
-	decoder = new aricoder( str_in, 0 );
 	
 	// decode JPG header
 	if ( !pjg_decode_generic( decoder, &hdrdata, &hdrs ) ) return false;
@@ -3685,8 +3755,15 @@ INTERN bool packJPG::unpack_pjg( void )
 	// parse header for image-info
 	if ( !jpg_setup_imginfo() ) return false;
 	
+	return true;
+}
+INTERN bool packJPG::unpack_pjg_body( void )
+{
+	unsigned char cb;
+	aricoder* decoder = unpack_pjg_decoder;
+	
 	// decode actual components data
-	for ( cmp = 0; cmp < cmpc; cmp++ ) {		
+	for ( int cmp = 0; cmp < cmpc; cmp++ ) {		
 		// decode frequency scan ('zero-sort-scan')
 		if ( !pjg_decode_zstscan( decoder, cmp ) ) return false;		
 		// decode zero-distribution-lists for higher (7x7) ACs
@@ -3708,15 +3785,28 @@ INTERN bool packJPG::unpack_pjg( void )
 	if ( cb == 0 ) grbs = 0;
 	else if ( !pjg_decode_generic( decoder, &grbgdata, &grbs ) ) return false;
 	
-	// finalize arithmetic compression
-	delete( decoder );
-	
 	
 	// get filesize
 	pjgfilesize = str_in->getsize();
 	
 	
 	return true;
+}
+	
+INTERN bool packJPG::unpack_pjg( void )
+{
+	//aricoder* decoder;
+	bool ret = false;
+	if(unpack_pjg_header_check()) {
+		// init arithmetic compression
+		unpack_pjg_decoder = new aricoder( str_in, 0 );
+		if(unpack_pjg_header()) {
+			ret = unpack_pjg_body();
+		}
+		// finalize arithmetic compression
+		delete( unpack_pjg_decoder );
+	}
+	return ret;
 }
 
 /* -----------------------------------------------
@@ -7759,5 +7849,12 @@ EXPORT bool pjglib_decode_stream2mem( void* p, unsigned char** out_file, unsigne
 }
 EXPORT void pjglib_init_streams( void* p, void* in_src, int in_type, int in_size, void* out_dest, int out_type ) {
     return ((packJPG*)p)->pjglib_init_streams(in_src,in_type,in_size,out_dest,out_type);
+}
+
+EXPORT bool pjglib_pjg_get_info( void* p, struct pjglib_pjg_info* info ) {
+    return ((packJPG*)p)->pjglib_pjg_get_info(info);
+}
+EXPORT bool pjglib_pjg_get_argb( void* p, unsigned char** out_file, unsigned int* out_size, char* msg ) {
+    return ((packJPG*)p)->pjglib_pjg_get_argb(out_file,out_size,msg);
 }
 #endif

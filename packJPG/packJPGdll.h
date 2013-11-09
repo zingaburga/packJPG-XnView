@@ -1,6 +1,11 @@
 // packJPGdll.h - function import declarations for the packJPG DLL
 #define IMPORT __declspec( dllimport )
 
+struct pjglib_pjg_info {
+	int channels;
+	int width, height;
+};
+
 /* -----------------------------------------------
 	function declarations: library only functions
 	----------------------------------------------- */
@@ -14,6 +19,9 @@ IMPORT bool pjglib_decode_stream2mem( void* p, unsigned char** out_file, unsigne
 IMPORT void pjglib_init_streams( void* p, void* in_src, int in_type, int in_size, void* out_dest, int out_type );
 IMPORT const char* pjglib_version_info( void );
 IMPORT const char* pjglib_short_name( void );
+
+IMPORT bool pjglib_pjg_get_info( void* p, struct pjglib_pjg_info* info );
+IMPORT bool pjglib_pjg_get_argb( void* p, unsigned char** out_file, unsigned int* out_size, char* msg );
 
 /* a short reminder about input/output stream types
    for the pjglib_init_streams() function
