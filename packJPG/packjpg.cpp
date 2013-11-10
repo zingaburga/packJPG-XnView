@@ -3873,7 +3873,7 @@ INTERN bool packJPG::decode_to_argb( void )
 	}
 	
 	// alloc memory for image data
-	int rgbasize = cmpnfo[0].bch * cmpnfo[0].bcv * 64 * 4 * sizeof( char );
+	int rgbasize = imgwidth * imgheight * 4 * sizeof( char );
 	unsigned char* rgbadata = (unsigned char*) malloc ( rgbasize );
 	if ( rgbadata == NULL ) {
 		sprintf( errormessage, MEM_ERRMSG );
@@ -3886,15 +3886,14 @@ INTERN bool packJPG::decode_to_argb( void )
 		case 1:
 			// grayscale image
 			libyuv::I400ToARGB(imgdata, cmpnfo[0].bch*8,
-			                   rgbadata, cmpnfo[0].bch*8*4,
-			                   cmpnfo[0].bch*8, cmpnfo[0].bcv*8);
+			                   rgbadata, imgwidth*4,
+			                   imgwidth, imgheight);
 		break;
 		case 3:
 			// yuv or rgb
 			// TODO: detection
 			if(1) {
 				// YUV
-				// TODO: check YUV to RGB colour conversion type (TV/PC levels etc)
 				unsigned char* y=0, * u=0, * v=0;
 				// upscale if sizes are different
 				bool plane1scale = (cmpnfo[1].bch < cmpnfo[0].bch || cmpnfo[1].bcv < cmpnfo[0].bcv);
@@ -3940,8 +3939,8 @@ INTERN bool packJPG::decode_to_argb( void )
 				libyuv::I444ToARGB(y ? y : imgdata, cmpnfo[0].bch*8,
 				                   u ? u : imgdata + cmpnfo[0].bc*64, cmpnfo[0].bch*8,
 				                   v ? v : imgdata + cmpnfo[0].bc*64*2, cmpnfo[0].bch*8,
-				                   rgbadata, cmpnfo[0].bch*8*4,
-				                   cmpnfo[0].bch*8, cmpnfo[0].bcv*8);
+				                   rgbadata, imgwidth*4,
+				                   imgwidth, imgheight);
 				
 				if(y) free(y);
 				if(u) free(u);
@@ -7781,15 +7780,14 @@ INTERN bool packJPG::dump_bmp_header( void )
 {
 	bmp_header h;
 	h.magic = 0x4D42;
-	// TODO: un-pad macroblocks??
-	h.imageSize = cmpnfo[0].bc * 64 * 4 * sizeof( char );
+	h.imageSize = imgwidth * imgheight * 4 * sizeof( char );
 	h.size = sizeof(h) + h.imageSize;
 	h.reserved = 0;
 	h.offset = sizeof(h);
 	h.dibSize = 40;
 	// TODO: un-pad macroblocks??
-	h.width = cmpnfo[0].bch*8;
-	h.height = -cmpnfo[0].bcv*8; // negate to store right way up
+	h.width = imgwidth;
+	h.height = -imgheight; // negate to store right way up
 	h.planes = 1;
 	h.bpp = 32;
 	h.compression = 0;
