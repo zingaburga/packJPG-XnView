@@ -81,20 +81,26 @@ typedef signed char int8;
 #endif
 
 #if !defined(LIBYUV_API)
+#ifdef __GNUC__
+// this ends up being attached incorrectly to variables, but apart from GCC chucking a fit, it doesn't seem to break anything
+#define LIBYUV_API_ALIGN __attribute__((force_align_arg_pointer))
+#else
+#define LIBYUV_API_ALIGN
+#endif
 #if defined(_WIN32) || defined(__CYGWIN__)
 #if defined(LIBYUV_BUILDING_SHARED_LIBRARY)
-#define LIBYUV_API __declspec(dllexport)
+#define LIBYUV_API __declspec(dllexport) LIBYUV_API_ALIGN
 #elif defined(LIBYUV_USING_SHARED_LIBRARY)
-#define LIBYUV_API __declspec(dllimport)
+#define LIBYUV_API __declspec(dllimport) LIBYUV_API_ALIGN
 #else
-#define LIBYUV_API
+#define LIBYUV_API LIBYUV_API_ALIGN
 #endif  // LIBYUV_BUILDING_SHARED_LIBRARY
 #elif defined(__GNUC__) && (__GNUC__ >= 4) && !defined(__APPLE__) && \
     (defined(LIBYUV_BUILDING_SHARED_LIBRARY) || \
     defined(LIBYUV_USING_SHARED_LIBRARY))
-#define LIBYUV_API __attribute__ ((visibility ("default")))
+#define LIBYUV_API __attribute__ ((visibility ("default"))) LIBYUV_API_ALIGN
 #else
-#define LIBYUV_API
+#define LIBYUV_API LIBYUV_API_ALIGN
 #endif  // __GNUC__
 #endif  // LIBYUV_API
 
